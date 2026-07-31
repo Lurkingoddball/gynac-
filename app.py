@@ -11,9 +11,10 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom Header & Caption Styling
+# Custom Header & Credits
 st.title("Ask anything from Gynaec-Obs")
 st.caption("Source: DC Dutta")
+st.caption("By Aryan Jadhav")
 
 # Retrieve Groq API Key
 groq_api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
@@ -39,16 +40,32 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
+# Sidebar Controls
+with st.sidebar:
+    st.header("⚙️ Options")
+    if st.button("🗑️ Clear Chat History", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+
 # Chat memory initialization
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # Display conversation history
-for message in st.session_state.messages:
+for idx, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        # Download button for assistant responses
+        if message["role"] == "assistant":
+            st.download_button(
+                label="📥 Download Note",
+                data=message["content"],
+                file_name=f"dutta_notes_{idx}.txt",
+                mime="text/plain",
+                key=f"dl_{idx}"
+            )
 
-# User input field with updated placeholder
+# User input field
 if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -59,15 +76,12 @@ if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
             # 1. Retrieve top context documents with page metadata
             docs = vector_db.similarity_search(prompt, k=6)
             
-            # Format retrieved text along with page numbers from document metadata
             context_blocks = []
             page_numbers = set()
             
             for doc in docs:
-                # Extract page number if present in metadata (defaults to 'Unknown')
                 page_num = doc.metadata.get("page", doc.metadata.get("page_number", "N/A"))
                 if page_num != "N/A":
-                    # Convert 0-indexed page numbers to standard 1-indexed if stored as integer
                     if isinstance(page_num, int):
                         page_num = page_num + 1
                     page_numbers.add(str(page_num))
@@ -77,7 +91,7 @@ if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
             context_text = "\n\n".join(context_blocks)
             pages_ref = ", ".join(sorted(page_numbers)) if page_numbers else "DC Dutta Textbook"
 
-            # 2. Format recent conversation history (last 6 turns)
+            # 2. Format recent conversation history
             chat_history_str = ""
             recent_messages = st.session_state.messages[-6:-1]
             for msg in recent_messages:
@@ -87,7 +101,7 @@ if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
             if not chat_history_str:
                 chat_history_str = "None (This is the start of the conversation)."
 
-            # 3. System Prompt requiring page references
+            # 3. System Prompt requiring page references and structured response
             full_prompt = f"""You are an elite Medical AI Tutor specialized in Obstetrics and Gynecology based on DC Dutta's Textbook.
 Provide structured, highly detailed, medical-school grade explanations. Always cite the exact page numbers from where the information was retrieved.
 
@@ -114,3 +128,12 @@ Generate a comprehensive, structured medical response:"""
 
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
+            
+            # Offer download for freshly generated answer
+            st.download_button(
+                label="📥 Download Note",
+                data=answer,
+                file_name="dutta_notes.txt",
+                mime="text/plain",
+                key=f"dl_latest_{len(st.session_state.messages)}"
+            )
