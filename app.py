@@ -11,26 +11,22 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom Mobile Responsive CSS (Fixes off-center / right-aligned layout on phones)
+# Custom Mobile Alignment & Responsive Styling
 st.markdown("""
-<style>
-    /* Full width container for mobile viewports */
-    .block-container {
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        padding-top: 2rem !important;
-        max-width: 100% !important;
-    }
-    /* Center headings on small screens */
-    @media (max-width: 768px) {
-        .stAppViewContainer {
-            padding: 0px !important;
+    <style>
+        /* Center content and fix left margin alignment on mobile devices */
+        .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            max-width: 800px !important;
+            margin: 0 auto !important;
         }
-        h1, p {
-            text-align: left;
+        .stChatMessage {
+            width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
         }
-    }
-</style>
+    </style>
 """, unsafe_allow_html=True)
 
 # Custom Header & Credits
@@ -73,30 +69,23 @@ with st.sidebar:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display conversation history
-for idx, message in enumerate(st.session_state.messages):
+# Display conversation history (without download buttons)
+for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        if message["role"] == "assistant":
-            st.download_button(
-                label="📥 Download Note",
-                data=message["content"],
-                file_name=f"dutta_notes_{idx}.txt",
-                mime="text/plain",
-                key=f"dl_{idx}"
-            )
 
 # User input field
 if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
-    # 1. Capture previous context for search query
+    # 1. Capture recent context for search & LLM memory
     recent_user_queries = [m["content"] for m in st.session_state.messages if m["role"] == "user"]
     
+    # Context-aware query construction for follow-ups
     if recent_user_queries:
         search_query = f"{recent_user_queries[-1]} {prompt}"
     else:
         search_query = prompt
 
-    # Build conversation memory
+    # Format previous conversation history for memory
     chat_history_str = ""
     for msg in st.session_state.messages[-6:]:
         role_label = "Student" if msg["role"] == "user" else "Tutor"
@@ -105,14 +94,14 @@ if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
     if not chat_history_str:
         chat_history_str = "None (This is the start of the conversation)."
 
-    # Append current user prompt
+    # Append user input
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
         with st.spinner("Searching DC Dutta & generating detailed response..."):
-            # 2. Retrieve context chunks
+            # 2. Retrieve context documents
             docs = vector_db.similarity_search(search_query, k=10)
             
             context_blocks = []
@@ -120,35 +109,39 @@ if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
             
             for doc in docs:
                 meta = doc.metadata or {}
-                # Extract page number across all standard metadata keys
-                page_num = meta.get("page", meta.get("page_number", meta.get("source_page", meta.get("Page", None))))
+                # Scan for any key containing page info
+                page_val = None
+                for key in ["page", "page_number", "source_page", "Page", "p"]:
+                    if key in meta:
+                        page_val = meta[key]
+                        break
                 
-                if page_num is not None:
+                if page_val is not None and str(page_val).strip() != "":
                     try:
-                        page_int = int(page_num) + 1
-                        page_numbers.add(str(page_int))
-                        page_label = str(page_int)
+                        p_int = int(page_val) + 1
+                        page_numbers.add(str(p_int))
+                        p_str = str(p_int)
                     except ValueError:
-                        page_numbers.add(str(page_num))
-                        page_label = str(page_num)
+                        page_numbers.add(str(page_val))
+                        p_str = str(page_val)
                 else:
-                    page_label = "Referenced Chapter"
+                    p_str = "N/A"
                 
-                context_blocks.append(f"[Chunk Context: Page {page_label}]\n{doc.page_content}")
+                context_blocks.append(f"[Page {p_str}]\n{doc.page_content}")
 
             context_text = "\n\n".join(context_blocks)
             
-            # Format display string for source citation
             if page_numbers:
-                pages_ref = "Page(s): " + ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
+                pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
+                citation_line = f"📌 **Source Citation**: DC Dutta Obstetrics & Gynecology (Page(s): {pages_ref})"
             else:
-                pages_ref = "DC Dutta Textbook (Standard Edition)"
+                citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-            # 3. System Prompt
+            # 3. Comprehensive System Prompt
             full_prompt = f"""You are an elite Medical AI Tutor specialized in Obstetrics and Gynecology based strictly on DC Dutta's Textbook.
-Provide highly detailed, medical-school grade explanations. Do NOT give brief summaries.
+Provide highly detailed, medical-school grade explanations. Do NOT provide brief summaries.
 
-=== CONVERSATION HISTORY (FOR CONTINUITY) ===
+=== CONVERSATION HISTORY (FOR CONTINUITY & FOLLOW-UPS) ===
 {chat_history_str}
 
 === RETRIEVED TEXTBOOK CONTEXT ===
@@ -158,12 +151,17 @@ Provide highly detailed, medical-school grade explanations. Do NOT give brief su
 {prompt}
 
 === INSTRUCTIONS FOR RESPONSE ===
-1. **Maintain Continuity**: If the prompt is a follow-up, build directly on previous answers.
-2. **Exhaustive Structure**: Use standard medical headings (Definition, Etiology & Pathophysiology, Clinical Features, Management).
-3. **Source Citation Requirement**: Always end your response with an explicit source citation block:
-   `📌 **Source Citation**: DC Dutta Obstetrics & Gynecology ({pages_ref})`
+1. **Maintain Continuity**: If the current question is a follow-up (e.g. asking "why?", "how to manage it?", "what are the clinical features?"), refer to the topic discussed in the Conversation History.
+2. **Exhaustive Structure**: Format answers with standard medical headings:
+   - **Definition / Overview**
+   - **Etiology & Pathophysiology**
+   - **Clinical Features & Diagnosis**
+   - **Management / Line of Treatment** (Medical, Surgical, Emergency)
+3. **Detail & Depth**: Use bullet points, bold key terms, and provide complete clinical steps.
+4. **Source Citation**: At the very end of your response, strictly include:
+   `{citation_line}`
 
-Generate a detailed medical response:"""
+Generate a detailed medical explanation:"""
 
             # 4. Generate response
             response = llm.invoke(full_prompt)
@@ -171,11 +169,3 @@ Generate a detailed medical response:"""
 
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
-            
-            st.download_button(
-                label="📥 Download Note",
-                data=answer,
-                file_name="dutta_notes.txt",
-                mime="text/plain",
-                key=f"dl_latest_{len(st.session_state.messages)}"
-            )
