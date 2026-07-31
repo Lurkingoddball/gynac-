@@ -1,11 +1,11 @@
 import os
 import streamlit as st
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
 
-# Set page config
+# Page setup
 st.set_page_config(
     page_title="DC Dutta Medical AI",
     page_icon="🩺",
@@ -21,7 +21,7 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Secrets.")
     st.stop()
 
-# Initialize Vector Store & LLM
+# Load Vector Database & LLM
 @st.cache_resource
 def load_rag_chain():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -45,23 +45,21 @@ def load_rag_chain():
 
 qa_chain = load_rag_chain()
 
-# Initialize Chat History
+# Chat session memory
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display Chat History using native Streamlit chat bubbles
+# Display conversation
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User Input
+# User query input
 if prompt := st.chat_input("Ask a question from DC Dutta..."):
-    # Display user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate and display assistant response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             response = qa_chain.run(prompt)
