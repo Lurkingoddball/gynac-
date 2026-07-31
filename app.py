@@ -3,11 +3,8 @@ import streamlit as st
 from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains import create_retrieval_chain
 
-# Page configuration
+# Set clean page config
 st.set_page_config(
     page_title="DC Dutta Medical AI",
     page_icon="🩺",
@@ -23,45 +20,28 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Secrets.")
     st.stop()
 
-# Initialize Vector DB and Chain
+# Initialize Vector DB & LLM directly
 @st.cache_resource
-def load_rag_chain():
+def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vector_db = Chroma(
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    retriever = vector_db.as_retriever(search_kwargs={"k": 3})
-    
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="llama-3.3-70b-versatile",
         temperature=0.2
     )
+    return vector_db, llm
 
-    system_prompt = (
-        "You are an expert AI tutor specialized in Obstetrics and Gynecology based on DC Dutta's textbooks.\n"
-        "Use the retrieved context to answer the user's question clearly and concisely.\n\n"
-        "Context:\n{context}"
-    )
+vector_db, llm = init_rag()
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human", "{input}"),
-    ])
-
-    question_answer_chain = create_stuff_documents_chain(llm, prompt)
-    rag_chain = create_retrieval_chain(retriever, question_answer_chain)
-    
-    return rag_chain
-
-rag_chain = load_rag_chain()
-
-# Initialize Chat Memory
+# Chat memory session
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display prior messages
+# Display message history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -73,8 +53,23 @@ if prompt := st.chat_input("Ask a question from DC Dutta..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = rag_chain.invoke({"input": prompt})
-            answer = response["answer"]
+        with st.spinner("Searching DC Dutta & generating response..."):
+            # 1. Retrieve top context
+            docs = vector_db.similarity_search(prompt, k=3)
+            context_text = "\n\n".join([doc.page_content for doc in docs])
+            
+            # 2. Build prompt directly
+            full_prompt = f"""You are an expert AI medical tutor based on DC Dutta's Obstetric & Gynecology textbooks. 
+Answer the question accurately, clearly, and concisely based on the retrieved context below.
+
+Context:
+{context_text}
+
+Question: {prompt}
+"""
+            # 3. Get response directly from Groq
+            response = llm.invoke(full_prompt)
+            answer = response.content
+            
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
