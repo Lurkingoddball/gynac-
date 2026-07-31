@@ -34,7 +34,7 @@ def init_rag():
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="llama-3.3-70b-versatile",
-        temperature=0.3
+        temperature=0.2
     )
     return vector_db, llm
 
@@ -55,7 +55,6 @@ if "messages" not in st.session_state:
 for idx, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        # Download button for assistant responses
         if message["role"] == "assistant":
             st.download_button(
                 label="📥 Download Note",
@@ -67,14 +66,25 @@ for idx, message in enumerate(st.session_state.messages):
 
 # User input field
 if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
+    # 1. Format previous chat memory BEFORE adding current prompt
+    chat_history_str = ""
+    recent_messages = st.session_state.messages[-6:]  # Get last 6 turns correctly
+    for msg in recent_messages:
+        role_label = "Student" if msg["role"] == "user" else "Tutor"
+        chat_history_str += f"{role_label}: {msg['content']}\n"
+
+    if not chat_history_str:
+        chat_history_str = "None (This is the start of the conversation)."
+
+    # Append current user prompt to session state
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Searching DC Dutta & generating response..."):
-            # 1. Retrieve top context documents with page metadata
-            docs = vector_db.similarity_search(prompt, k=6)
+        with st.spinner("Analyzing DC Dutta & generating detailed response..."):
+            # 2. Retrieve expanded textbook context (k=12 for full-chapter coverage)
+            docs = vector_db.similarity_search(prompt, k=12)
             
             context_blocks = []
             page_numbers = set()
@@ -86,26 +96,16 @@ if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
                         page_num = page_num + 1
                     page_numbers.add(str(page_num))
                 
-                context_blocks.append(f"[Source Page: {page_num}]\n{doc.page_content}")
+                context_blocks.append(f"[Page {page_num}]\n{doc.page_content}")
 
             context_text = "\n\n".join(context_blocks)
             pages_ref = ", ".join(sorted(page_numbers)) if page_numbers else "DC Dutta Textbook"
 
-            # 2. Format recent conversation history
-            chat_history_str = ""
-            recent_messages = st.session_state.messages[-6:-1]
-            for msg in recent_messages:
-                role_label = "Student" if msg["role"] == "user" else "Tutor"
-                chat_history_str += f"{role_label}: {msg['content']}\n"
+            # 3. High-depth system prompt
+            full_prompt = f"""You are an elite Medical AI Tutor specialized in Obstetrics and Gynecology based strictly on DC Dutta's Textbook.
+Your task is to provide comprehensive, medical-school grade explanations. Do NOT provide brief summaries. Give deep, exhaustive clinical details.
 
-            if not chat_history_str:
-                chat_history_str = "None (This is the start of the conversation)."
-
-            # 3. System Prompt requiring page references and structured response
-            full_prompt = f"""You are an elite Medical AI Tutor specialized in Obstetrics and Gynecology based on DC Dutta's Textbook.
-Provide structured, highly detailed, medical-school grade explanations. Always cite the exact page numbers from where the information was retrieved.
-
-=== RECENT CONVERSATION HISTORY ===
+=== CONVERSATION HISTORY (FOR CONTINUITY) ===
 {chat_history_str}
 
 === RETRIEVED TEXTBOOK CONTEXT ===
@@ -115,12 +115,17 @@ Provide structured, highly detailed, medical-school grade explanations. Always c
 {prompt}
 
 === INSTRUCTIONS FOR RESPONSE ===
-1. **In-Depth Explanation**: Provide thorough, structured answers (Definition, Etiology, Clinical Features, Management where applicable).
-2. **Include Page Citations**: At the end of your answer, explicitly state the source pages used from DC Dutta. Format it as:
+1. **Maintain Continuity**: Use the conversation history to understand follow-up questions, pronouns (it, this, that), or requests for clarification.
+2. **Exhaustive Structure**: Organize the answer thoroughly using standard medical headings where applicable:
+   - **Definition / Overview**
+   - **Etiology & Risk Factors / Pathophysiology**
+   - **Clinical Features & Diagnosis**
+   - **Management / Line of Treatment** (Medical, Surgical, Emergency)
+3. **Detail & Depth**: Use bullet points, bold key medical terms, and provide complete clinical protocols.
+4. **Source Citation**: At the very end of your response, add:
    `📌 **Source Citation**: DC Dutta Obstetrics & Gynecology (Page(s): {pages_ref})`
-3. **Accuracy**: Stick strictly to the context provided.
 
-Generate a comprehensive, structured medical response:"""
+Generate a detailed, full-scale medical explanation:"""
 
             # 4. Generate response
             response = llm.invoke(full_prompt)
@@ -129,7 +134,6 @@ Generate a comprehensive, structured medical response:"""
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
             
-            # Offer download for freshly generated answer
             st.download_button(
                 label="📥 Download Note",
                 data=answer,
