@@ -3,9 +3,11 @@ import streamlit as st
 from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
-from langchain.chains import RetrievalQA
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
 
-# Page setup
+# Page configuration
 st.set_page_config(
     page_title="DC Dutta Medical AI",
     page_icon="🩺",
@@ -21,7 +23,7 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Secrets.")
     st.stop()
 
-# Load Vector Database & LLM
+# Initialize Vector DB and Chain
 @st.cache_resource
 def load_rag_chain():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -36,25 +38,35 @@ def load_rag_chain():
         model_name="llama-3.3-70b-versatile",
         temperature=0.2
     )
-    
-    return RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever
+
+    system_prompt = (
+        "You are an expert AI tutor specialized in Obstetrics and Gynecology based on DC Dutta's textbooks.\n"
+        "Use the retrieved context to answer the user's question clearly and concisely.\n\n"
+        "Context:\n{context}"
     )
 
-qa_chain = load_rag_chain()
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{input}"),
+    ])
 
-# Chat session memory
+    question_answer_chain = create_stuff_documents_chain(llm, prompt)
+    rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+    
+    return rag_chain
+
+rag_chain = load_rag_chain()
+
+# Initialize Chat Memory
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display conversation
+# Display prior messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User query input
+# User prompt
 if prompt := st.chat_input("Ask a question from DC Dutta..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -62,6 +74,7 @@ if prompt := st.chat_input("Ask a question from DC Dutta..."):
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = qa_chain.run(prompt)
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            response = rag_chain.invoke({"input": prompt})
+            answer = response["answer"]
+            st.markdown(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
