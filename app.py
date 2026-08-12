@@ -14,7 +14,18 @@ st.set_page_config(
 ADMIN_USERNAME = "aryan_admin"
 ADMIN_PASSWORD = "Aryan@2026"
 
-# --- 3. CUSTOM GEMINI-STYLE CSS ---
+# --- 3. CACHED MODEL & VECTOR DB INITIALIZATION (FOR SPEED) ---
+@st.cache_resource(show_spinner=False)
+def load_vector_db():
+    from langchain_community.vectorstores import Chroma
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+    
+    # Load once and keep in server memory for ultra-fast queries
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    db = Chroma(persist_directory="dutta_vector_db", embedding_function=embeddings)
+    return db
+
+# --- 4. CUSTOM GEMINI-STYLE CSS ---
 st.markdown("""
 <style>
     /* Hide default Streamlit menu and footer, but keep header toggle visible */
@@ -95,7 +106,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. SESSION STATE INITIALIZATION ---
+# --- 5. SESSION STATE INITIALIZATION ---
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 
@@ -107,7 +118,7 @@ if "current_chat_id" not in st.session_state:
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-# --- 5. SIDEBAR: CHAT HISTORY & ADMIN ACCESS ---
+# --- 6. SIDEBAR: CHAT HISTORY & ADMIN ACCESS ---
 with st.sidebar:
     if st.button("➕ New chat", use_container_width=True):
         new_id = str(uuid.uuid4())
@@ -147,7 +158,7 @@ with st.sidebar:
                 st.session_state.admin_logged_in = False
                 st.rerun()
 
-# --- 6. MAIN CONTENT AREA ---
+# --- 7. MAIN CONTENT AREA ---
 current_chat = st.session_state.chats[st.session_state.current_chat_id]
 messages = current_chat["messages"]
 
@@ -198,39 +209,52 @@ with (chat_tab if st.session_state.admin_logged_in else st.container()):
         messages.append({"role": "user", "content": prompt})
         st.rerun()
 
-# --- 7. RESPONSE GENERATION TRIGGER ---
+# --- 8. FAST & DETAILED RESPONSE GENERATION TRIGGER ---
 if len(messages) > 0 and messages[-1]["role"] == "user":
     user_prompt = messages[-1]["content"]
     
     with st.chat_message("assistant", avatar="✨"):
-        with st.spinner("Analyzing DC Dutta knowledge base..."):
+        with st.spinner("Searching DC Dutta knowledge base..."):
             try:
-                from langchain_community.vectorstores import Chroma
-                from langchain_community.embeddings import HuggingFaceEmbeddings
                 from langchain_groq import ChatGroq
 
-                # Load embeddings and vector database using standard community imports
-                embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-                db = Chroma(persist_directory="dutta_vector_db", embedding_function=embeddings)
+                # 1. Access Cached Database (Instant loading)
+                db = load_vector_db()
                 
-                docs = db.similarity_search(user_prompt, k=3)
-                context_text = "\n\n".join([doc.page_content for doc in docs]) if docs else "No direct matching context found."
+                # 2. Retrieve Top 6 Chunks for Maximum Detail
+                docs = db.similarity_search(user_prompt, k=6)
+                context_text = "\n\n---\n\n".join([doc.page_content for doc in docs]) if docs else ""
 
-                # Retrieve Groq API Key
-                groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
-                llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
+                if not context_text:
+                    response_text = "I couldn't find relevant details in DC Dutta's textbook for this query."
+                    citation_info = "DC Dutta Obstetrics & Gynecology Textbook"
+                else:
+                    # 3. Retrieve Groq LLM
+                    groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
+                    llm = ChatGroq(
+                        temperature=0.1, 
+                        groq_api_key=groq_api_key, 
+                        model_name="llama-3.3-70b-versatile",
+                        max_tokens=2048
+                    )
 
-                system_prompt = f"""You are an expert AI medical assistant specializing in Gynaecology and Obstetrics. 
-Answer the user's question accurately using the provided context from DC Dutta's textbook.
+                    # 4. Strict Detailed Prompting
+                    system_prompt = f"""You are an expert clinical AI assistant specializing in Gynaecology and Obstetrics, based strictly on DC Dutta's Textbook.
 
-Context:
+INSTRUCTIONS:
+- Answer the user's question using **ONLY** the provided Context from DC Dutta's textbook below.
+- Provide a **very comprehensive, detailed, step-by-step, clinical explanation**.
+- Use bullet points, bold headings, definitions, stages, diagnostic features, and management protocols wherever applicable.
+- Do NOT make up information outside of the provided textbook context.
+
+CONTEXT FROM DC DUTTA TEXTBOOK:
 {context_text}
 
-Question: {user_prompt}
+USER QUESTION: {user_prompt}
 """
-                response = llm.invoke(system_prompt)
-                response_text = response.content
-                citation_info = "DC Dutta Obstetrics & Gynecology Textbook"
+                    response = llm.invoke(system_prompt)
+                    response_text = response.content
+                    citation_info = "DC Dutta Obstetrics & Gynecology Textbook"
 
             except Exception as e:
                 response_text = f"⚠️ Error fetching response: {str(e)}\n\nMake sure your `GROQ_API_KEY` is added under Streamlit Secrets."
