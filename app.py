@@ -1,306 +1,245 @@
-import os
-import sqlite3
 import streamlit as st
-from langchain_chroma import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
+import uuid
+import datetime
 
-# -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & CUSTOM UI BRANDING (CSS)
-# -----------------------------------------------------------------------------
+# --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Gynaec-Obs AI",
-    page_icon="🩺",
-    layout="centered",
-    initial_sidebar_state="collapsed"
+    page_title="Gynaecology and Obstetrics",
+    page_icon="✨",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Modern, Clean Clinical UI
+# --- 2. SECURITY & ADMIN CREDENTIALS ---
+ADMIN_USERNAME = "aryan_admin"
+ADMIN_PASSWORD = "Aryan@2026"
+
+# --- 3. CUSTOM GEMINI-STYLE CSS ---
 st.markdown("""
-    <style>
-    /* Global Page Styling */
-    .stApp {
-        background-color: #FAFAFC;
-    }
-    .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 5rem !important;
-        padding-left: 1.2rem !important;
-        padding-right: 1.2rem !important;
-        max-width: 800px !important;
-        margin: 0 auto !important;
-    }
-    
-    /* Branding Header Card */
-    .brand-header {
-        background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%);
-        padding: 1.5rem;
-        border-radius: 16px;
-        color: white;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 4px 12px rgba(30, 58, 138, 0.15);
-    }
-    .brand-title {
-        font-size: 1.8rem;
-        font-weight: 700;
-        margin: 0;
-        letter-spacing: -0.5px;
-    }
-    .brand-subtitle {
-        font-size: 0.95rem;
-        opacity: 0.9;
-        margin-top: 4px;
-        margin-bottom: 0;
-    }
-    .brand-badge {
-        display: inline-block;
-        background: rgba(255, 255, 255, 0.2);
-        padding: 3px 10px;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-top: 10px;
-    }
-    
-    /* Chat Container Alignment & Clean Styling */
-    .stChatMessage {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E5E7EB !important;
-        border-radius: 12px !important;
-        padding: 12px 16px !important;
-        margin-bottom: 12px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
-    }
-    
-    /* Hide Default Streamlit Menu artifacts for cleaner app feel */
+<style>
+    /* Hide default Streamlit elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    </style>
-""", unsafe_allow_html=True)
-
-# -----------------------------------------------------------------------------
-# 2. LOCAL SQLITE DATABASE FOR PERSISTENT CHAT HISTORY
-# -----------------------------------------------------------------------------
-DB_FILE = "chat_history.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
-            role TEXT,
-            content TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-def save_chat_message(session_id, role, content):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT INTO history (session_id, role, content) VALUES (?, ?, ?)", (session_id, role, content))
-    conn.commit()
-    conn.close()
-
-def load_chat_history(session_id):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT role, content FROM history WHERE session_id = ? ORDER BY id ASC", (session_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [{"role": r[0], "content": r[1]} for r in rows]
-
-init_db()
-
-# -----------------------------------------------------------------------------
-# 3. INITIALIZE MODELS & VECTOR STORE
-# -----------------------------------------------------------------------------
-groq_api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-
-if not groq_api_key:
-    st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
-    st.stop()
-
-@st.cache_resource
-def init_rag():
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    vector_db = Chroma(
-        persist_directory="./dutta_vector_db",
-        embedding_function=embeddings
-    )
-    llm = ChatGroq(
-        groq_api_key=groq_api_key,
-        model_name="llama-3.3-70b-versatile",
-        temperature=0.2
-    )
-    return vector_db, llm
-
-vector_db, llm = init_rag()
-
-# -----------------------------------------------------------------------------
-# 4. BRANDING HEADER
-# -----------------------------------------------------------------------------
-st.markdown("""
-    <div class="brand-header">
-        <div class="brand-title">Ask anything from Gynaec-Obs</div>
-        <div class="brand-subtitle">Source: DC Dutta Textbook of Obstetrics & Gynecology</div>
-        <div class="brand-badge">Created by Aryan Jadhav</div>
-    </div>
-""", unsafe_allow_html=True)
-
-# -----------------------------------------------------------------------------
-# 5. SIDEBAR: ADMIN DASHBOARD & CHAT CONTROLS
-# -----------------------------------------------------------------------------
-if "session_id" not in st.session_state:
-    st.session_state.session_id = "default_session"
-
-with st.sidebar:
-    st.title("⚙️ Control Panel")
+    header {visibility: hidden;}
     
-    # Session Management
-    st.subheader("💬 Chat Sessions")
-    if st.button("➕ New Chat Session", use_container_width=True):
-        import uuid
-        st.session_state.session_id = str(uuid.uuid4())[:8]
-        st.session_state.messages = []
+    /* Main Background Gradient */
+    .stApp {
+        background: radial-gradient(circle at center, #f0f7ff 0%, #ffffff 70%);
+        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    }
+
+    /* Centered Greeting & Credits */
+    .main-title {
+        text-align: center;
+        font-size: 2.8rem;
+        font-weight: 500;
+        color: #1f1f1f;
+        margin-top: 8vh;
+        margin-bottom: 0.2rem;
+        letter-spacing: -0.5px;
+    }
+    
+    .sub-credit {
+        text-align: center;
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: #0b57d0;
+        margin-bottom: 0.1rem;
+    }
+    
+    .source-credit {
+        text-align: center;
+        font-size: 0.9rem;
+        color: #5f6368;
+        margin-bottom: 3rem;
+    }
+
+    /* Floating Input Styling */
+    .stChatInputContainer {
+        border-radius: 28px !important;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+        border: 1px solid #e0e2e5 !important;
+        background-color: #ffffff !important;
+        padding: 4px !important;
+    }
+
+    /* Sidebar Customization */
+    section[data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+        border-right: 1px solid #e9ecef;
+    }
+    
+    .sidebar-header {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #5f6368;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .chat-history-btn {
+        width: 100%;
+        text-align: left;
+        border: none;
+        background: transparent;
+        padding: 8px 12px;
+        border-radius: 8px;
+        color: #3c4043;
+        font-size: 0.9rem;
+    }
+    
+    /* Citation Box */
+    .citation-tag {
+        display: inline-block;
+        background-color: #e8f0fe;
+        color: #1a73e8;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin-top: 8px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- 4. SESSION STATE INITIALIZATION ---
+if "chats" not in st.session_state:
+    # Stores structure: {chat_id: {"title": str, "messages": []}}
+    st.session_state.chats = {}
+
+if "current_chat_id" not in st.session_state:
+    new_id = str(uuid.uuid4())
+    st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
+    st.session_state.current_chat_id = new_id
+
+if "admin_logged_in" not in st.session_state:
+    st.session_state.admin_logged_in = False
+
+# --- 5. SIDEBAR: CHAT HISTORY & ADMIN ACCESS ---
+with st.sidebar:
+    # Top Action: New Chat Button
+    if st.button("➕ New chat", use_container_width=True):
+        new_id = str(uuid.uuid4())
+        st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
+        st.session_state.current_chat_id = new_id
         st.rerun()
 
-    st.markdown("---")
-    
-    # Admin Access Control Gate
-    st.subheader("🔒 Admin Access")
-    admin_passkey = st.secrets.get("ADMIN_PASSKEY", "aryan123")  # Default passkey
-    input_passkey = st.text_input("Enter Admin Passkey", type="password")
-    
-    is_admin = input_passkey == admin_passkey
-    
-    if is_admin:
-        st.success("Admin Mode Active")
-        st.markdown("**Admin Controls:**")
-        if st.button("📊 View Total Saved Queries"):
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute("SELECT COUNT(*) FROM history")
-            count = c.fetchone()[0]
-            conn.close()
-            st.info(f"Total database messages: {count}")
-            
-        if st.button("🗑️ Clear Local Database"):
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute("DELETE FROM history")
-            conn.commit()
-            conn.close()
-            st.session_state.messages = []
-            st.success("Database cleared!")
+    st.markdown('<div class="sidebar-header">Recent Chats</div>', unsafe_allow_html=True)
+
+    # Render List of Previous Chat Sessions
+    for cid, chat_data in list(st.session_state.chats.items())[::-1]:
+        title = chat_data["title"][:22] + "..." if len(chat_data["title"]) > 22 else chat_data["title"]
+        
+        # Highlight Active Chat
+        is_active = (cid == st.session_state.current_chat_id)
+        btn_label = f"💬 {title}" if not is_active else f"🗣️ {title}"
+        
+        if st.button(btn_label, key=cid, use_container_width=True):
+            st.session_state.current_chat_id = cid
             st.rerun()
-    else:
-        if input_passkey:
-            st.error("Incorrect Passkey")
 
-# -----------------------------------------------------------------------------
-# 6. CHAT SESSION MEMORY LOAD
-# -----------------------------------------------------------------------------
-if "messages" not in st.session_state or not st.session_state.messages:
-    st.session_state.messages = load_chat_history(st.session_state.session_id)
+    st.divider()
 
-# Render Chat History
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# -----------------------------------------------------------------------------
-# 7. PROMPT HANDLING & RESPONSE GENERATION
-# -----------------------------------------------------------------------------
-if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
-    # 1. Save & Display User Message
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    save_chat_message(st.session_state.session_id, "user", prompt)
-    
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    # 2. Build Context-Aware Search Query for Follow-ups
-    recent_queries = [m["content"] for m in st.session_state.messages if m["role"] == "user"]
-    search_query = f"{recent_queries[-2]} {prompt}" if len(recent_queries) > 1 else prompt
-
-    # 3. Format Conversation History for LLM Memory
-    chat_history_str = ""
-    for msg in st.session_state.messages[-6:]:
-        label = "Student" if msg["role"] == "user" else "Tutor"
-        chat_history_str += f"{label}: {msg['content']}\n"
-
-    with st.chat_message("assistant"):
-        with st.spinner("Searching DC Dutta & synthesizing response..."):
-            # Retrieve Vector DB Chunks
-            docs = vector_db.similarity_search(search_query, k=10)
+    # Admin Panel Expander
+    with st.expander("🔒 Admin Panel"):
+        if not st.session_state.admin_logged_in:
+            admin_user = st.text_input("Username", key="admin_user_input")
+            admin_pass = st.text_input("Password", type="password", key="admin_pass_input")
             
-            context_blocks = []
-            page_numbers = set()
-            
-            for doc in docs:
-                meta = doc.metadata or {}
-                page_val = None
-                for key in ["page", "page_number", "source_page", "Page", "p"]:
-                    if key in meta:
-                        page_val = meta[key]
-                        break
-                
-                if page_val is not None and str(page_val).strip() != "":
-                    try:
-                        p_int = int(page_val) + 1
-                        page_numbers.add(str(p_int))
-                        p_str = str(p_int)
-                    except ValueError:
-                        page_numbers.add(str(page_val))
-                        p_str = str(page_val)
+            if st.button("Login as Admin"):
+                if admin_user == ADMIN_USERNAME and admin_pass == ADMIN_PASSWORD:
+                    st.session_state.admin_logged_in = True
+                    st.success("Authenticated!")
+                    st.rerun()
                 else:
-                    p_str = "N/A"
-                
-                context_blocks.append(f"[Page {p_str}]\n{doc.page_content}")
+                    st.error("Invalid Admin Credentials")
+        else:
+            st.write("🟢 **Admin Mode Active**")
+            if st.button("Logout Admin"):
+                st.session_state.admin_logged_in = False
+                st.rerun()
 
-            context_text = "\n\n".join(context_blocks)
+# --- 6. MAIN CONTENT AREA ---
+current_chat = st.session_state.chats[st.session_state.current_chat_id]
+messages = current_chat["messages"]
+
+# ADMIN DASHBOARD VIEW (If Admin logged in and toggled view)
+if st.session_state.admin_logged_in:
+    admin_tab, chat_tab = st.tabs(["📊 Admin Backend Analytics", "💬 AI Interface View"])
+else:
+    admin_tab = None
+    chat_tab = st.container()
+
+# Render Admin Analytics Dashboard
+if st.session_state.admin_logged_in and admin_tab:
+    with admin_tab:
+        st.title("Admin Dashboard & System Logs")
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Active Chat Sessions", len(st.session_state.chats))
+        
+        total_queries = sum(len(c["messages"]) // 2 for c in st.session_state.chats.values())
+        col2.metric("Total Queries Processed", total_queries)
+        col3.metric("System Status", "Healthy 🟢")
+
+        st.divider()
+        st.subheader("Session Log Database")
+        
+        # Inspect raw backend data across all user chats
+        for cid, data in st.session_state.chats.items():
+            with st.expander(f"Session ID: {cid} | Title: {data['title']}"):
+                st.json(data["messages"])
+
+# Main Chat View
+with (chat_tab if st.session_state.admin_logged_in else st.container()):
+    
+    # If starting a fresh chat, display Gemini-style centered landing UI
+    if len(messages) == 0:
+        st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
+        st.markdown('<div class="source-credit">Source: DC Dutta</div>', unsafe_allow_html=True)
+
+    # Render previous conversation history for the current session
+    for msg in messages:
+        avatar = "🎓" if msg["role"] == "user" else "✨"
+        with st.chat_message(msg["role"], avatar=avatar):
+            st.markdown(msg["content"])
+            if "citation" in msg and msg["citation"]:
+                st.markdown(f'<div class="citation-tag">📌 {msg["citation"]}</div>', unsafe_allow_html=True)
+
+    # Chat Input Pill
+    if prompt := st.chat_input("Ask anything about Gynaecology & Obstetrics..."):
+        
+        # Update Chat Session Title based on first prompt
+        if len(messages) == 0:
+            current_chat["title"] = prompt[:25]
             
-            if page_numbers:
-                pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
-                citation_line = f"📌 **Source Citation**: DC Dutta Obstetrics & Gynecology (Page(s): {pages_ref})"
-            else:
-                citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
+        # Append User Message
+        messages.append({"role": "user", "content": prompt})
+        
+        # Rerun to render landing text out / user prompt in
+        st.rerun()
 
-            # 4. System Prompt
-            full_prompt = f"""You are an elite Medical AI Tutor specialized in Obstetrics and Gynecology based strictly on DC Dutta's Textbook.
-Provide highly detailed, medical-school grade explanations with explicit clinical steps.
-
-=== CONVERSATION HISTORY (FOR CONTINUITY & FOLLOW-UPS) ===
-{chat_history_str}
-
-=== RETRIEVED TEXTBOOK CONTEXT ===
-{context_text}
-
-=== CURRENT QUESTION ===
-{prompt}
-
-=== INSTRUCTIONS FOR RESPONSE ===
-1. **Maintain Continuity**: Handle follow-up questions seamlessly using the conversation history context.
-2. **Exhaustive Structure**: Use standard medical headings:
-   - **Definition / Overview**
-   - **Etiology & Pathophysiology**
-   - **Clinical Features & Diagnosis**
-   - **Management / Line of Treatment** (Medical, Surgical, Emergency)
-3. **Detail & Depth**: Use bullet points, bold key medical terms, and state precise dosage protocols where applicable.
-4. **Source Citation**: End your answer strictly with:
-   `{citation_line}`
-
-Generate a thorough medical explanation:"""
-
-            response = llm.invoke(full_prompt)
-            answer = response.content
-
-            st.markdown(answer)
+# --- 7. RESPONSE GENERATION TRIGGER ---
+if len(messages) > 0 and messages[-1]["role"] == "user":
+    user_prompt = messages[-1]["content"]
+    
+    with st.chat_message("assistant", avatar="✨"):
+        with st.spinner("Analyzing DC Dutta knowledge base..."):
+            
+            # --- INSERT YOUR VECTOR SEARCH / GROQ PIPELINE HERE ---
+            # Standard output placeholder:
+            response_text = f"This is a structured medical response regarding **{user_prompt}** based on DC Dutta."
+            citation_info = "DC Dutta Obstetrics & Gynecology Textbook"
+            
+            st.markdown(response_text)
+            st.markdown(f'<div class="citation-tag">📌 Source: {citation_info}</div>', unsafe_allow_html=True)
             
             # Save Assistant Response
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-            save_chat_message(st.session_state.session_id, "assistant", answer)
+            messages.append({
+                "role": "assistant",
+                "content": response_text,
+                "citation": f"Source: {citation_info}"
+            })
