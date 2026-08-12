@@ -41,7 +41,7 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. EXACT GEMINI STYLING & TAB FIXES ---
+# --- 5. CUSTOM STYLING ---
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
@@ -107,22 +107,6 @@ st.markdown("""
         max-width: 850px !important;
         padding-top: 1rem !important;
     }
-
-    /* Make Admin Tabs look like prominent clickable buttons */
-    button[data-baseweb="tab"] {
-        background-color: #f0f4f9 !important;
-        border-radius: 20px !important;
-        padding: 8px 24px !important;
-        font-weight: 600 !important;
-        margin-right: 10px !important;
-        border: 1px solid #dce1e7 !important;
-    }
-
-    button[aria-selected="true"] {
-        background-color: #0b57d0 !important;
-        color: white !important;
-        border: none !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -138,8 +122,8 @@ if "current_chat_id" not in st.session_state:
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-if "admin_active_tab" not in st.session_state:
-    st.session_state.admin_active_tab = "💬 Chat Interface"
+if "admin_nav" not in st.session_state:
+    st.session_state.admin_nav = "💬 Chat Interface"
 
 # --- 7. SIDEBAR (CHAT HISTORY & ADMIN AUTH) ---
 with st.sidebar:
@@ -147,7 +131,7 @@ with st.sidebar:
         new_id = str(uuid.uuid4())
         st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
         st.session_state.current_chat_id = new_id
-        st.session_state.admin_active_tab = "💬 Chat Interface"
+        st.session_state.admin_nav = "💬 Chat Interface"
         st.rerun()
 
     st.markdown('<div class="sidebar-header">Recent Chats</div>', unsafe_allow_html=True)
@@ -159,7 +143,7 @@ with st.sidebar:
         
         if st.button(btn_label, key=cid, use_container_width=True):
             st.session_state.current_chat_id = cid
-            st.session_state.admin_active_tab = "💬 Chat Interface"
+            st.session_state.admin_nav = "💬 Chat Interface"
             st.rerun()
 
     st.divider()
@@ -186,15 +170,16 @@ with st.sidebar:
 current_chat = st.session_state.chats[st.session_state.current_chat_id]
 messages = current_chat["messages"]
 
-# Configure view mode
+# Navigation toggle for admin
 if st.session_state.admin_logged_in:
-    tab_selection = st.radio(
+    selected_nav = st.radio(
         "Navigation",
         ["💬 Chat Interface", "📊 Backend Analytics"],
+        key="admin_nav",
         horizontal=True,
         label_visibility="collapsed"
     )
-    show_analytics = (tab_selection == "📊 Backend Analytics")
+    show_analytics = (selected_nav == "📊 Backend Analytics")
 else:
     show_analytics = False
 
@@ -223,10 +208,10 @@ else:
             st.markdown(msg["content"])
 
     if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
-        if len(messages) == 0:
-            current_chat["title"] = prompt[:25]
-
         messages.append({"role": "user", "content": prompt})
+        # Auto-update session title from first prompt
+        if current_chat["title"] == "New Chat":
+            current_chat["title"] = prompt[:25]
         st.rerun()
 
 # --- 9. RAG RESPONSE GENERATION ENGINE ---
