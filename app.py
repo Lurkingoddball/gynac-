@@ -14,13 +14,13 @@ st.set_page_config(
 ADMIN_USERNAME = "aryan_admin"
 ADMIN_PASSWORD = "Aryan@2026"
 
-# --- 3. CACHED MODEL & VECTOR DB INITIALIZATION (FOR SPEED) ---
+# --- 3. CACHED VECTOR DATABASE LOADING ---
 @st.cache_resource(show_spinner=False)
 def load_vector_db():
     from langchain_community.vectorstores import Chroma
     from langchain_community.embeddings import HuggingFaceEmbeddings
     
-    # Load once and keep in server memory for ultra-fast queries
+    # Ensures persistent vector loading in RAM
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     db = Chroma(persist_directory="dutta_vector_db", embedding_function=embeddings)
     return db
@@ -28,20 +28,17 @@ def load_vector_db():
 # --- 4. CUSTOM GEMINI-STYLE CSS ---
 st.markdown("""
 <style>
-    /* Hide default Streamlit menu and footer, but keep header toggle visible */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header[data-testid="stHeader"] {
         background: transparent !important;
     }
     
-    /* Main Background Gradient */
     .stApp {
         background: radial-gradient(circle at center, #f0f7ff 0%, #ffffff 70%);
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
 
-    /* Centered Greeting & Credits */
     .main-title {
         text-align: center;
         font-size: 2.8rem;
@@ -67,7 +64,6 @@ st.markdown("""
         margin-bottom: 3rem;
     }
 
-    /* Floating Search Pill Input */
     .stChatInputContainer {
         border-radius: 28px !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
@@ -76,7 +72,6 @@ st.markdown("""
         padding: 4px !important;
     }
 
-    /* Sidebar Customization */
     section[data-testid="stSidebar"] {
         background-color: #f8f9fa;
         border-right: 1px solid #e9ecef;
@@ -92,7 +87,6 @@ st.markdown("""
         margin-bottom: 0.5rem;
     }
     
-    /* Citation Tag */
     .citation-tag {
         display: inline-block;
         background-color: #e8f0fe;
@@ -118,7 +112,7 @@ if "current_chat_id" not in st.session_state:
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-# --- 6. SIDEBAR: CHAT HISTORY & ADMIN ACCESS ---
+# --- 6. SIDEBAR MANAGEMENT ---
 with st.sidebar:
     if st.button("➕ New chat", use_container_width=True):
         new_id = str(uuid.uuid4())
@@ -139,7 +133,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Admin Panel Toggle
     with st.expander("🔒 Admin Panel"):
         if not st.session_state.admin_logged_in:
             admin_user = st.text_input("Username", key="admin_user_input")
@@ -151,45 +144,37 @@ with st.sidebar:
                     st.success("Authenticated!")
                     st.rerun()
                 else:
-                    st.error("Invalid Admin Credentials")
+                    st.error("Invalid Credentials")
         else:
             st.write("🟢 **Admin Mode Active**")
             if st.button("Logout Admin"):
                 st.session_state.admin_logged_in = False
                 st.rerun()
 
-# --- 7. MAIN CONTENT AREA ---
+# --- 7. MAIN INTERFACE ---
 current_chat = st.session_state.chats[st.session_state.current_chat_id]
 messages = current_chat["messages"]
 
 if st.session_state.admin_logged_in:
-    admin_tab, chat_tab = st.tabs(["📊 Admin Backend Analytics", "💬 AI Interface View"])
+    admin_tab, chat_tab = st.tabs(["📊 Admin Analytics", "💬 AI Interface View"])
 else:
     admin_tab = None
     chat_tab = st.container()
 
-# Render Admin Analytics Dashboard
 if st.session_state.admin_logged_in and admin_tab:
     with admin_tab:
-        st.title("Admin Dashboard & System Logs")
-        
+        st.title("Admin Dashboard & Logs")
         col1, col2, col3 = st.columns(3)
-        col1.metric("Total Active Chat Sessions", len(st.session_state.chats))
-        
-        total_queries = sum(len(c["messages"]) // 2 for c in st.session_state.chats.values())
-        col2.metric("Total Queries Processed", total_queries)
-        col3.metric("System Status", "Healthy 🟢")
-
+        col1.metric("Active Sessions", len(st.session_state.chats))
+        total_q = sum(len(c["messages"]) // 2 for c in st.session_state.chats.values())
+        col2.metric("Total Queries", total_q)
+        col3.metric("System", "Healthy 🟢")
         st.divider()
-        st.subheader("Session Log Database")
-        
         for cid, data in st.session_state.chats.items():
-            with st.expander(f"Session ID: {cid} | Title: {data['title']}"):
+            with st.expander(f"Session: {cid}"):
                 st.json(data["messages"])
 
-# Main Chat Interface
 with (chat_tab if st.session_state.admin_logged_in else st.container()):
-    
     if len(messages) == 0:
         st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
         st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
@@ -209,55 +194,60 @@ with (chat_tab if st.session_state.admin_logged_in else st.container()):
         messages.append({"role": "user", "content": prompt})
         st.rerun()
 
-# --- 8. FAST & DETAILED RESPONSE GENERATION TRIGGER ---
+# --- 8. SEARCH & RESPONSE GENERATION ---
 if len(messages) > 0 and messages[-1]["role"] == "user":
     user_prompt = messages[-1]["content"]
     
     with st.chat_message("assistant", avatar="✨"):
-        with st.spinner("Searching DC Dutta knowledge base..."):
+        with st.spinner("Scanning DC Dutta textbooks..."):
             try:
                 from langchain_groq import ChatGroq
 
-                # 1. Access Cached Database (Instant loading)
                 db = load_vector_db()
                 
-                # 2. Retrieve Top 6 Chunks for Maximum Detail
-                docs = db.similarity_search(user_prompt, k=6)
+                # Retrieve top 10 relevant context chunks across both textbooks
+                docs = db.similarity_search(user_prompt, k=10)
+                
                 context_text = "\n\n---\n\n".join([doc.page_content for doc in docs]) if docs else ""
 
-                if not context_text:
-                    response_text = "I couldn't find relevant details in DC Dutta's textbook for this query."
-                    citation_info = "DC Dutta Obstetrics & Gynecology Textbook"
+                # Fallback if no docs retrieved
+                if not context_text or len(context_text.strip()) == 0:
+                    response_text = (
+                        "⚠️ **No content retrieved from the database.**\n\n"
+                        "Please verify that the `dutta_vector_db` folder in your GitHub repository contains the processed vector files created using `sentence-transformers/all-MiniLM-L6-v2`."
+                    )
+                    citation_info = "Database Notice"
                 else:
-                    # 3. Retrieve Groq LLM
                     groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
+                    
+                    # High speed model execution
                     llm = ChatGroq(
                         temperature=0.1, 
                         groq_api_key=groq_api_key, 
                         model_name="llama-3.3-70b-versatile",
-                        max_tokens=2048
+                        max_tokens=3000
                     )
 
-                    # 4. Strict Detailed Prompting
-                    system_prompt = f"""You are an expert clinical AI assistant specializing in Gynaecology and Obstetrics, based strictly on DC Dutta's Textbook.
+                    system_prompt = f"""You are an expert clinical AI specializing exclusively in Gynaecology and Obstetrics.
 
-INSTRUCTIONS:
-- Answer the user's question using **ONLY** the provided Context from DC Dutta's textbook below.
-- Provide a **very comprehensive, detailed, step-by-step, clinical explanation**.
-- Use bullet points, bold headings, definitions, stages, diagnostic features, and management protocols wherever applicable.
-- Do NOT make up information outside of the provided textbook context.
+STRICT RULES:
+1. Rely **ONLY** on the context provided below from DC Dutta's Textbook.
+2. Provide an **exhaustive, highly detailed, structured, step-by-step clinical answer**.
+3. Use bold section titles, bullet points, definitions, etiology, clinical features, diagnostic steps, and management protocols from the book.
+4. Do NOT add external information not present in the context.
 
-CONTEXT FROM DC DUTTA TEXTBOOK:
+BOOK CONTEXT:
 {context_text}
 
-USER QUESTION: {user_prompt}
+QUESTION:
+{user_prompt}
 """
                     response = llm.invoke(system_prompt)
                     response_text = response.content
                     citation_info = "DC Dutta Obstetrics & Gynecology Textbook"
 
             except Exception as e:
-                response_text = f"⚠️ Error fetching response: {str(e)}\n\nMake sure your `GROQ_API_KEY` is added under Streamlit Secrets."
+                response_text = f"⚠️ Error processing query: {str(e)}"
                 citation_info = "System Warning"
 
             st.markdown(response_text)
