@@ -1,6 +1,7 @@
 import streamlit as st
 import uuid
 import datetime
+import os
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
@@ -79,18 +80,7 @@ st.markdown("""
         margin-bottom: 0.5rem;
     }
     
-    .chat-history-btn {
-        width: 100%;
-        text-align: left;
-        border: none;
-        background: transparent;
-        padding: 8px 12px;
-        border-radius: 8px;
-        color: #3c4043;
-        font-size: 0.9rem;
-    }
-    
-    /* Citation Box */
+    /* Citation Tag */
     .citation-tag {
         display: inline-block;
         background-color: #e8f0fe;
@@ -106,7 +96,6 @@ st.markdown("""
 
 # --- 4. SESSION STATE INITIALIZATION ---
 if "chats" not in st.session_state:
-    # Stores structure: {chat_id: {"title": str, "messages": []}}
     st.session_state.chats = {}
 
 if "current_chat_id" not in st.session_state:
@@ -119,7 +108,6 @@ if "admin_logged_in" not in st.session_state:
 
 # --- 5. SIDEBAR: CHAT HISTORY & ADMIN ACCESS ---
 with st.sidebar:
-    # Top Action: New Chat Button
     if st.button("➕ New chat", use_container_width=True):
         new_id = str(uuid.uuid4())
         st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
@@ -128,11 +116,8 @@ with st.sidebar:
 
     st.markdown('<div class="sidebar-header">Recent Chats</div>', unsafe_allow_html=True)
 
-    # Render List of Previous Chat Sessions
     for cid, chat_data in list(st.session_state.chats.items())[::-1]:
         title = chat_data["title"][:22] + "..." if len(chat_data["title"]) > 22 else chat_data["title"]
-        
-        # Highlight Active Chat
         is_active = (cid == st.session_state.current_chat_id)
         btn_label = f"💬 {title}" if not is_active else f"🗣️ {title}"
         
@@ -142,7 +127,7 @@ with st.sidebar:
 
     st.divider()
 
-    # Admin Panel Expander
+    # Admin Panel Toggle
     with st.expander("🔒 Admin Panel"):
         if not st.session_state.admin_logged_in:
             admin_user = st.text_input("Username", key="admin_user_input")
@@ -165,7 +150,6 @@ with st.sidebar:
 current_chat = st.session_state.chats[st.session_state.current_chat_id]
 messages = current_chat["messages"]
 
-# ADMIN DASHBOARD VIEW (If Admin logged in and toggled view)
 if st.session_state.admin_logged_in:
     admin_tab, chat_tab = st.tabs(["📊 Admin Backend Analytics", "💬 AI Interface View"])
 else:
@@ -187,21 +171,18 @@ if st.session_state.admin_logged_in and admin_tab:
         st.divider()
         st.subheader("Session Log Database")
         
-        # Inspect raw backend data across all user chats
         for cid, data in st.session_state.chats.items():
             with st.expander(f"Session ID: {cid} | Title: {data['title']}"):
                 st.json(data["messages"])
 
-# Main Chat View
+# Main Chat Interface
 with (chat_tab if st.session_state.admin_logged_in else st.container()):
     
-    # If starting a fresh chat, display Gemini-style centered landing UI
     if len(messages) == 0:
         st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
         st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
         st.markdown('<div class="source-credit">Source: DC Dutta</div>', unsafe_allow_html=True)
 
-    # Render previous conversation history for the current session
     for msg in messages:
         avatar = "🎓" if msg["role"] == "user" else "✨"
         with st.chat_message(msg["role"], avatar=avatar):
@@ -209,17 +190,11 @@ with (chat_tab if st.session_state.admin_logged_in else st.container()):
             if "citation" in msg and msg["citation"]:
                 st.markdown(f'<div class="citation-tag">📌 {msg["citation"]}</div>', unsafe_allow_html=True)
 
-    # Chat Input Pill
     if prompt := st.chat_input("Ask anything about Gynaecology & Obstetrics..."):
-        
-        # Update Chat Session Title based on first prompt
         if len(messages) == 0:
             current_chat["title"] = prompt[:25]
             
-        # Append User Message
         messages.append({"role": "user", "content": prompt})
-        
-        # Rerun to render landing text out / user prompt in
         st.rerun()
 
 # --- 7. RESPONSE GENERATION TRIGGER ---
@@ -228,16 +203,39 @@ if len(messages) > 0 and messages[-1]["role"] == "user":
     
     with st.chat_message("assistant", avatar="✨"):
         with st.spinner("Analyzing DC Dutta knowledge base..."):
-            
-            # --- INSERT YOUR VECTOR SEARCH / GROQ PIPELINE HERE ---
-            # Standard output placeholder:
-            response_text = f"This is a structured medical response regarding **{user_prompt}** based on DC Dutta."
-            citation_info = "DC Dutta Obstetrics & Gynecology Textbook"
-            
+            try:
+                from langchain_community.vectorstores import Chroma
+                from langchain_huggingface import HuggingFaceEmbeddings
+                from langchain_groq import ChatGroq
+
+                embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+                db = Chroma(persist_directory="dutta_vector_db", embedding_function=embeddings)
+                
+                docs = db.similarity_search(user_prompt, k=3)
+                context_text = "\n\n".join([doc.page_content for doc in docs])
+
+                groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
+                llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
+
+                system_prompt = f"""You are an expert AI medical assistant specializing in Gynaecology and Obstetrics. 
+Answer the user's question accurately using the provided context from DC Dutta's textbook.
+
+Context:
+{context_text}
+
+Question: {user_prompt}
+"""
+                response = llm.invoke(system_prompt)
+                response_text = response.content
+                citation_info = "DC Dutta Obstetrics & Gynecology Textbook"
+
+            except Exception as e:
+                response_text = f"⚠️ Error fetching response: {str(e)}\n\nMake sure your `GROQ_API_KEY` is added under Streamlit Secrets."
+                citation_info = "System Warning"
+
             st.markdown(response_text)
             st.markdown(f'<div class="citation-tag">📌 Source: {citation_info}</div>', unsafe_allow_html=True)
             
-            # Save Assistant Response
             messages.append({
                 "role": "assistant",
                 "content": response_text,
