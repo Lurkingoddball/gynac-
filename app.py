@@ -17,10 +17,12 @@ ADMIN_PASSWORD = "Aryan@2026"
 # --- 3. CUSTOM GEMINI-STYLE CSS ---
 st.markdown("""
 <style>
-    /* Hide default Streamlit header and footer */
+    /* Hide default Streamlit menu and footer, but keep header toggle visible */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
     
     /* Main Background Gradient */
     .stApp {
