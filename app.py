@@ -44,18 +44,15 @@ vector_db, llm = init_rag()
 # --- 5. EXACT GEMINI STYLING ---
 st.markdown("""
 <style>
-    /* Hide standard Streamlit header and footer */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header[data-testid="stHeader"] { background: transparent !important; }
     
-    /* Radial Gradient Background matching Gemini */
     .stApp {
         background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
 
-    /* Centered Header Section */
     .main-title {
         text-align: center;
         font-size: 2.8rem;
@@ -81,7 +78,6 @@ st.markdown("""
         margin-bottom: 3rem;
     }
 
-    /* Floating Pill Chat Input Box */
     .stChatInputContainer {
         border-radius: 28px !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
@@ -92,7 +88,6 @@ st.markdown("""
         margin: 0 auto !important;
     }
 
-    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #f8f9fa;
         border-right: 1px solid #e9ecef;
@@ -148,7 +143,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Protected Admin Section
     with st.expander("🔒 Admin Panel"):
         if not st.session_state.admin_logged_in:
             admin_user = st.text_input("Username", key="admin_user_input")
@@ -177,7 +171,7 @@ else:
     admin_tab = None
     chat_tab = st.container()
 
-# Admin Backend View
+# Admin View
 if st.session_state.admin_logged_in and admin_tab:
     with admin_tab:
         st.title("Backend Query Logs")
@@ -190,7 +184,7 @@ if st.session_state.admin_logged_in and admin_tab:
             with st.expander(f"Session ID: {cid} - Title: {data['title']}"):
                 st.json(data["messages"])
 
-# User Chat View
+# Chat Interface View
 with (chat_tab if st.session_state.admin_logged_in else st.container()):
     if len(messages) == 0:
         st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
@@ -206,31 +200,31 @@ with (chat_tab if st.session_state.admin_logged_in else st.container()):
         if len(messages) == 0:
             current_chat["title"] = prompt[:25]
 
-        # Construct contextual search query
-        recent_user_queries = [m["content"] for m in messages if m["role"] == "user"]
-        search_query = f"{recent_user_queries[-1]} {prompt}" if recent_user_queries else prompt
-
-        # Format conversation memory
-        chat_history_str = ""
-        for msg in messages[-6:]:
-            role_label = "Student" if msg["role"] == "user" else "Tutor"
-            chat_history_str += f"{role_label}: {msg['content']}\n"
-        
-        if not chat_history_str:
-            chat_history_str = "None (Start of conversation)."
-
         messages.append({"role": "user", "content": prompt})
         st.rerun()
 
-# --- 9. RAG RESPONSE GENERATION ---
+# --- 9. RAG RESPONSE GENERATION ENGINE ---
 if len(messages) > 0 and messages[-1]["role"] == "user":
     user_prompt = messages[-1]["content"]
     
     with st.chat_message("assistant", avatar="✨"):
         with st.spinner("Searching DC Dutta & generating detailed response..."):
             try:
-                # Retrieve context documents
-                docs = vector_db.similarity_search(user_prompt, k=10)
+                # 1. Build context search query from previous interactions
+                recent_user_queries = [m["content"] for m in messages if m["role"] == "user"]
+                search_query = f"{recent_user_queries[-2]} {user_prompt}" if len(recent_user_queries) > 1 else user_prompt
+
+                # 2. Reconstruct chat history string safely within execution scope
+                chat_history_str = ""
+                for msg in messages[:-1][-6:]:
+                    role_label = "Student" if msg["role"] == "user" else "Tutor"
+                    chat_history_str += f"{role_label}: {msg['content']}\n"
+                
+                if not chat_history_str:
+                    chat_history_str = "None (Start of conversation)."
+
+                # 3. Retrieve context documents
+                docs = vector_db.similarity_search(search_query, k=10)
                 
                 context_blocks = []
                 page_numbers = set()
