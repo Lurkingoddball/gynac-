@@ -35,17 +35,17 @@ def init_rag():
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="llama-3.3-70b-versatile",
-        temperature=0.1,  # Low temperature for factual accuracy
-        max_tokens=4096   # Allow full, non-truncated medical answers
+        temperature=0.1,
+        max_tokens=4096
     )
     return vector_db, llm
 
 vector_db, llm = init_rag()
 
-# --- 5. GEMINI UI STYLING & CLEANUP OVERRIDES ---
+# --- 5. GEMINI UI STYLING & FULL OVERRIDES ---
 st.markdown("""
 <style>
-    /* HIDE STREAMLIT BRANDING, CROWN, FORK, AND GITHUB BUTTONS */
+    /* 1. HIDE ALL STREAMLIT BRANDING, BADGES, AND CROWN BUTTONS */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     header {visibility: hidden !important;}
@@ -58,12 +58,39 @@ st.markdown("""
     button[title="View source on GitHub"] { display: none !important; }
     .stActionButton { display: none !important; }
     
+    /* Streamlit Cloud Specific Floating Host Badges (Red crown & Green icon) */
+    .stAppHostBadge { display: none !important; }
+    iframe[title="Streamlit App Badge"] { display: none !important; }
+    #manage-app-button { display: none !important; }
+    div[data-testid="stDecoration"] { display: none !important; }
+
+    /* 2. APP BACKGROUND */
     .stApp {
         background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
 
-    /* Dynamic Main Title */
+    /* 3. CENTERED MAIN CONTAINER FOR MOBILE & DESKTOP */
+    .block-container {
+        max-width: 800px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        padding-top: 1rem !important;
+        padding-bottom: 110px !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    /* Center Align Chat Messages */
+    div[data-testid="stChatMessage"] {
+        max-width: 800px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* 4. DYNAMIC TITLES */
     .main-title {
         text-align: center;
         font-size: clamp(1.6rem, 5vw, 2.5rem);
@@ -88,33 +115,23 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
-    /* Floating Chat Input Bar */
+    /* 5. PERFECTLY CENTERED FLOATING CHAT INPUT */
     .stChatInputContainer {
         border-radius: 28px !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
         border: 1px solid #e0e2e5 !important;
         background-color: #ffffff !important;
         padding: 4px !important;
-        width: 92% !important;
-        max-width: 800px !important;
-        margin: 0 auto !important;
+        width: 90% !important;
+        max-width: 780px !important;
         position: fixed !important;
         bottom: 15px !important;
-        left: 0 !important;
-        right: 0 !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
         z-index: 999 !important;
     }
 
-    /* Main Container Padding */
-    .block-container {
-        max-width: 850px !important;
-        padding-top: 1rem !important;
-        padding-bottom: 100px !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-    }
-
-    /* Sidebar Styling */
+    /* 6. SIDEBAR STYLING */
     section[data-testid="stSidebar"] {
         background-color: #f8f9fa;
         border-right: 1px solid #e9ecef;
@@ -132,6 +149,7 @@ st.markdown("""
         margin-bottom: 0.5rem;
     }
 
+    /* Mobile Fine-Tuning */
     @media (max-width: 640px) {
         .block-container {
             padding-left: 0.5rem !important;
