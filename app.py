@@ -9,8 +9,8 @@ from langchain_groq import ChatGroq
 st.set_page_config(
     page_title="Gynaecology and Obstetrics",
     page_icon="✨",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="centered",  # Native centered layout handles responsiveness properly
+    initial_sidebar_state="auto"  # Allows native mobile menu button to render
 )
 
 # --- 2. ADMIN CREDENTIALS ---
@@ -42,52 +42,62 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. GEMINI UI STYLING & FULL OVERRIDES ---
+# --- 5. COMPREHENSIVE CSS FIXES ---
 st.markdown("""
 <style>
-    /* 1. HIDE ALL STREAMLIT BRANDING, BADGES, AND CROWN BUTTONS */
-    #MainMenu {visibility: hidden !important;}
-    footer {visibility: hidden !important;}
-    header {visibility: hidden !important;}
-    header[data-testid="stHeader"] { display: none !important; }
+    /* 1. FORCE HIDE ENTIRE TOP AND BOTTOM HOST UI WRAPPERS */
+    header, footer, [data-testid="stHeader"], [data-testid="stToolbar"] {
+        display: none !important;
+        height: 0 !important;
+        visibility: hidden !important;
+    }
     
-    [data-testid="stStatusWidget"] { display: none !important; }
-    .stAppBadge { display: none !important; }
-    [data-testid="stToolbar"] { display: none !important; }
-    div[class*="viewerBadge"] { display: none !important; }
-    button[title="View source on GitHub"] { display: none !important; }
-    .stActionButton { display: none !important; }
-    
-    /* Streamlit Cloud Specific Floating Host Badges (Red crown & Green icon) */
-    .stAppHostBadge { display: none !important; }
-    iframe[title="Streamlit App Badge"] { display: none !important; }
-    #manage-app-button { display: none !important; }
-    div[data-testid="stDecoration"] { display: none !important; }
+    /* Target all floating badges, crown buttons, and bottom-right avatars */
+    .stAppBadge, 
+    [data-testid="stStatusWidget"], 
+    div[class*="viewerBadge"], 
+    button[title="View source on GitHub"],
+    .stActionButton, 
+    .stAppHostBadge, 
+    iframe[title="Streamlit App Badge"], 
+    #manage-app-button, 
+    div[data-testid="stDecoration"],
+    [data-testid="stToolbarActions"],
+    a[href*="share.streamlit.io"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
 
-    /* 2. APP BACKGROUND */
+    /* 2. BACKGROUND & APP VIEWPORT */
     .stApp {
         background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
 
-    /* 3. CENTERED MAIN CONTAINER FOR MOBILE & DESKTOP */
-    .block-container {
+    /* 3. CENTER LAYOUT CORRECTION FOR MOBILE AND DESKTOP */
+    .stMain {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        width: 100% !important;
+    }
+
+    .main .block-container, [data-testid="stMainBlockContainer"] {
         max-width: 800px !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-        padding-top: 1rem !important;
-        padding-bottom: 110px !important;
-        padding-left: 0.75rem !important;
-        padding-right: 0.75rem !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+        padding-top: 2rem !important;
+        padding-bottom: 120px !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
     }
 
     /* Center Align Chat Messages */
     div[data-testid="stChatMessage"] {
-        max-width: 800px !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
     }
 
     /* 4. DYNAMIC TITLES */
@@ -96,7 +106,7 @@ st.markdown("""
         font-size: clamp(1.6rem, 5vw, 2.5rem);
         font-weight: 500;
         color: #1f1f1f;
-        margin-top: 2vh;
+        margin-top: 1vh;
         margin-bottom: 0.2rem;
     }
     
@@ -123,7 +133,7 @@ st.markdown("""
         background-color: #ffffff !important;
         padding: 4px !important;
         width: 90% !important;
-        max-width: 780px !important;
+        max-width: 760px !important;
         position: fixed !important;
         bottom: 15px !important;
         left: 50% !important;
@@ -131,14 +141,17 @@ st.markdown("""
         z-index: 999 !important;
     }
 
-    /* 6. SIDEBAR STYLING */
+    /* 6. RESPONSIVE SIDEBAR FIX */
     section[data-testid="stSidebar"] {
         background-color: #f8f9fa;
         border-right: 1px solid #e9ecef;
-        width: 85vw !important;
-        max-width: 320px !important;
     }
     
+    /* Ensure the mobile toggle hamburger menu stays visible */
+    [data-testid="stSidebarNav"] {
+        display: block !important;
+    }
+
     .sidebar-header {
         font-size: 0.8rem;
         font-weight: 600;
@@ -147,22 +160,6 @@ st.markdown("""
         letter-spacing: 0.5px;
         margin-top: 1rem;
         margin-bottom: 0.5rem;
-    }
-
-    /* Mobile Fine-Tuning */
-    @media (max-width: 640px) {
-        .block-container {
-            padding-left: 0.5rem !important;
-            padding-right: 0.5rem !important;
-        }
-        
-        div[data-testid="stMetric"] {
-            background-color: #ffffff;
-            padding: 10px;
-            border-radius: 12px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-            margin-bottom: 8px;
-        }
     }
 </style>
 """, unsafe_allow_html=True)
