@@ -1,6 +1,6 @@
 streamlit
+langchain-chroma
 langchain-community
 langchain-groq
 sentence-transformers
 chromadb
-pypdf
