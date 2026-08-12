@@ -9,8 +9,8 @@ from langchain_groq import ChatGroq
 st.set_page_config(
     page_title="Gynaecology and Obstetrics",
     page_icon="✨",
-    layout="centered",  # Native centered layout handles responsiveness properly
-    initial_sidebar_state="auto"  # Allows native mobile menu button to render
+    layout="centered",
+    initial_sidebar_state="collapsed"  # Starts collapsed on mobile with visible toggle button
 )
 
 # --- 2. ADMIN CREDENTIALS ---
@@ -42,65 +42,68 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. COMPREHENSIVE CSS FIXES ---
+# --- 5. COMPREHENSIVE CSS & SCROLL FIXES ---
 st.markdown("""
 <style>
-    /* 1. FORCE HIDE ENTIRE TOP AND BOTTOM HOST UI WRAPPERS */
-    header, footer, [data-testid="stHeader"], [data-testid="stToolbar"] {
-        display: none !important;
-        height: 0 !important;
-        visibility: hidden !important;
-    }
-    
-    /* Target all floating badges, crown buttons, and bottom-right avatars */
-    .stAppBadge, 
-    [data-testid="stStatusWidget"], 
-    div[class*="viewerBadge"], 
-    button[title="View source on GitHub"],
-    .stActionButton, 
-    .stAppHostBadge, 
-    iframe[title="Streamlit App Badge"], 
-    #manage-app-button, 
-    div[data-testid="stDecoration"],
-    [data-testid="stToolbarActions"],
-    a[href*="share.streamlit.io"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
+    /* 1. DISABLE PULL-TO-REFRESH ON MOBILE ENTIRELY */
+    html, body, .stApp {
+        overscroll-behavior-y: none !important;
+        touch-action: pan-x pan-y !important;
     }
 
-    /* 2. BACKGROUND & APP VIEWPORT */
+    /* 2. KEEP HEADER TRANSPARENT SO SIDEBAR TOGGLE (>>) REMAINS VISIBLE */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        z-index: 99 !important;
+    }
+    
+    /* Ensure sidebar collapse/expand icon is always visible & touch-friendly */
+    button[data-testid="stHeaderNavButton"], 
+    button[data-testid="baseButton-header"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* Hide default Streamlit footer & action buttons without breaking top header */
+    footer { display: none !important; }
+    #MainMenu { display: none !important; }
+    [data-testid="stStatusWidget"] { display: none !important; }
+    .stAppBadge { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    div[class*="viewerBadge"] { display: none !important; }
+    button[title="View source on GitHub"] { display: none !important; }
+    .stActionButton { display: none !important; }
+    .stAppHostBadge { display: none !important; }
+    iframe[title="Streamlit App Badge"] { display: none !important; }
+    #manage-app-button { display: none !important; }
+    div[data-testid="stDecoration"] { display: none !important; }
+
+    /* 3. APP BACKGROUND */
     .stApp {
         background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
 
-    /* 3. CENTER LAYOUT CORRECTION FOR MOBILE AND DESKTOP */
-    .stMain {
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        width: 100% !important;
-    }
-
+    /* 4. SCROLLABLE MAIN CONTAINER (FIXES OVERFLOW & CUT-OFF CONTENT) */
     .main .block-container, [data-testid="stMainBlockContainer"] {
         max-width: 800px !important;
         width: 100% !important;
         margin: 0 auto !important;
-        padding-top: 2rem !important;
-        padding-bottom: 120px !important;
+        padding-top: 1rem !important;
+        padding-bottom: 140px !important; /* Prevents input bar from blocking answer text */
         padding-left: 1rem !important;
         padding-right: 1rem !important;
     }
 
-    /* Center Align Chat Messages */
+    /* Chat message bubble containment */
     div[data-testid="stChatMessage"] {
         max-width: 100% !important;
         margin: 0 auto !important;
+        word-break: break-word !important;
     }
 
-    /* 4. DYNAMIC TITLES */
+    /* 5. DYNAMIC TITLES */
     .main-title {
         text-align: center;
         font-size: clamp(1.6rem, 5vw, 2.5rem);
@@ -125,14 +128,14 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
-    /* 5. PERFECTLY CENTERED FLOATING CHAT INPUT */
+    /* 6. FLOATING INPUT BAR SAFEGUARDED FOR MOBILE DOCKS */
     .stChatInputContainer {
         border-radius: 28px !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
         border: 1px solid #e0e2e5 !important;
         background-color: #ffffff !important;
         padding: 4px !important;
-        width: 90% !important;
+        width: 92% !important;
         max-width: 760px !important;
         position: fixed !important;
         bottom: 15px !important;
@@ -141,15 +144,11 @@ st.markdown("""
         z-index: 999 !important;
     }
 
-    /* 6. RESPONSIVE SIDEBAR FIX */
+    /* 7. SIDEBAR OVERLAY FIX FOR SMALL SCREENS */
     section[data-testid="stSidebar"] {
         background-color: #f8f9fa;
         border-right: 1px solid #e9ecef;
-    }
-    
-    /* Ensure the mobile toggle hamburger menu stays visible */
-    [data-testid="stSidebarNav"] {
-        display: block !important;
+        z-index: 99999 !important; /* Keeps sidebar on top when opened on mobile */
     }
 
     .sidebar-header {
