@@ -35,37 +35,47 @@ def init_rag():
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="llama-3.3-70b-versatile",
-        temperature=0.1,  # Low temperature for precise medical factual accuracy
-        max_tokens=4096   # Ensure full non-truncated output space
+        temperature=0.1,  # Low temperature for factual accuracy
+        max_tokens=4096   # Allow full, non-truncated medical answers
     )
     return vector_db, llm
 
 vector_db, llm = init_rag()
 
-# --- 5. GEMINI UI STYLING ---
+# --- 5. GEMINI UI STYLING & CLEANUP OVERRIDES ---
 st.markdown("""
 <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header[data-testid="stHeader"] { background: transparent !important; }
+    /* HIDE STREAMLIT BRANDING, CROWN, FORK, AND GITHUB BUTTONS */
+    #MainMenu {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
+    header {visibility: hidden !important;}
+    header[data-testid="stHeader"] { display: none !important; }
+    
+    [data-testid="stStatusWidget"] { display: none !important; }
+    .stAppBadge { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    div[class*="viewerBadge"] { display: none !important; }
+    button[title="View source on GitHub"] { display: none !important; }
+    .stActionButton { display: none !important; }
     
     .stApp {
         background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
 
+    /* Dynamic Main Title */
     .main-title {
         text-align: center;
-        font-size: 2.5rem;
-        font-weight: 400;
+        font-size: clamp(1.6rem, 5vw, 2.5rem);
+        font-weight: 500;
         color: #1f1f1f;
-        margin-top: 5vh;
+        margin-top: 2vh;
         margin-bottom: 0.2rem;
     }
     
     .sub-credit {
         text-align: center;
-        font-size: 1rem;
+        font-size: clamp(0.85rem, 3vw, 1rem);
         font-weight: 500;
         color: #0b57d0;
         margin-bottom: 0.2rem;
@@ -73,24 +83,43 @@ st.markdown("""
     
     .source-credit {
         text-align: center;
-        font-size: 0.9rem;
+        font-size: clamp(0.75rem, 2.5vw, 0.9rem);
         color: #5f6368;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
     }
 
+    /* Floating Chat Input Bar */
     .stChatInputContainer {
         border-radius: 28px !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
         border: 1px solid #e0e2e5 !important;
         background-color: #ffffff !important;
         padding: 4px !important;
+        width: 92% !important;
         max-width: 800px !important;
         margin: 0 auto !important;
+        position: fixed !important;
+        bottom: 15px !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 999 !important;
     }
 
+    /* Main Container Padding */
+    .block-container {
+        max-width: 850px !important;
+        padding-top: 1rem !important;
+        padding-bottom: 100px !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #f8f9fa;
         border-right: 1px solid #e9ecef;
+        width: 85vw !important;
+        max-width: 320px !important;
     }
     
     .sidebar-header {
@@ -103,9 +132,19 @@ st.markdown("""
         margin-bottom: 0.5rem;
     }
 
-    .block-container {
-        max-width: 850px !important;
-        padding-top: 1rem !important;
+    @media (max-width: 640px) {
+        .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+        
+        div[data-testid="stMetric"] {
+            background-color: #ffffff;
+            padding: 10px;
+            border-radius: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            margin-bottom: 8px;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -130,7 +169,7 @@ if st.session_state.current_chat_id not in st.session_state.chats:
     st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
     st.session_state.current_chat_id = new_id
 
-# --- 7. SIDEBAR ---
+# --- 7. SIDEBAR (NAVIGATION & ADMIN) ---
 with st.sidebar:
     if st.button("➕ New chat", use_container_width=True):
         new_id = str(uuid.uuid4())
@@ -237,7 +276,6 @@ else:
                     if not history_context:
                         history_context = "No prior context."
 
-                    # Increase chunk retrieval count for thorough coverage
                     docs = vector_db.similarity_search(prompt, k=15)
                     
                     context_blocks = []
