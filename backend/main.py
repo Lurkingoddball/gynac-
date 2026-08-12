@@ -43,7 +43,7 @@ groq_api_key = os.environ.get("GROQ_API_KEY")
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 vector_db = Chroma(
-    persist_directory="./dutta_vector_db",
+    persist_directory="../dutta_vector_db",
     embedding_function=embeddings
 )
 llm = ChatGroq(
