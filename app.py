@@ -35,7 +35,8 @@ def init_rag():
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="llama-3.3-70b-versatile",
-        temperature=0.2
+        temperature=0.1,  # Low temperature for precise medical factual accuracy
+        max_tokens=4096   # Ensure full non-truncated output space
     )
     return vector_db, llm
 
@@ -226,7 +227,7 @@ else:
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="✨"):
-            with st.spinner("Searching DC Dutta & generating response..."):
+            with st.spinner("Searching DC Dutta & retrieving comprehensive details..."):
                 try:
                     history_context = ""
                     for m in messages[:-1][-6:]:
@@ -236,7 +237,8 @@ else:
                     if not history_context:
                         history_context = "No prior context."
 
-                    docs = vector_db.similarity_search(prompt, k=10)
+                    # Increase chunk retrieval count for thorough coverage
+                    docs = vector_db.similarity_search(prompt, k=15)
                     
                     context_blocks = []
                     page_numbers = set()
@@ -256,7 +258,7 @@ else:
                         else:
                             p_str = "N/A"
                         
-                        context_blocks.append(f"[Page {p_str}]\n{doc.page_content}")
+                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content}")
 
                     context_text = "\n\n".join(context_blocks)
                     
@@ -266,7 +268,7 @@ else:
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-                    full_prompt = f"""You are an expert Medical Tutor in Obstetrics & Gynecology based strictly on DC Dutta's Textbook.
+                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing comprehensive, medical-school exam answers strictly derived from DC Dutta's Textbook.
 
 === CONVERSATION HISTORY ===
 {history_context}
@@ -277,15 +279,14 @@ else:
 === USER QUESTION ===
 {prompt}
 
-=== FORMATTING & CONTENT GUIDELINES ===
-1. **Strict Medical Accuracy**: Answer strictly using factual knowledge from DC Dutta's textbook context provided above.
-2. **Adaptive Formatting**: Choose the structural layout that BEST suits the specific question type:
-   - For **list/use/indication queries** (e.g., "uses of pessary"): Use concise bullet points with clear bold headers for each point or category.
-   - For **disease/condition queries** (e.g., "Preeclampsia"): Use appropriate clinical subheadings (e.g., Definition, Clinical Features, Management, Complications).
-   - For **comparisons** (e.g., "difference between X and Y"): Use a clean Markdown table or side-by-side bulleted comparisons.
-   - For **brief factual/definition queries**: Give a direct, clear paragraph followed by relevant details.
-3. **Natural Tone**: Avoid forcing irrelevant sections (e.g., do NOT include 'Etiology' or 'Management' headers when asked purely for a definition or a list of uses).
-4. **Citation**: Strictly append `{citation_line}` at the very end of your response.
+=== DETAILED ANSWER GUIDELINES ===
+1. **Comprehensiveness**: Provide a complete, highly detailed medical answer. Never give short, superficial summaries or brief bullet points unless explicitly asked for a quick list.
+2. **Textbook Fidelity**: Include all clinically relevant details mentioned in DC Dutta (Anatomy, Pathophysiology, Grades/Degrees, Etiology, Clinical Features, Diagnosis, Differential Diagnosis, and Comprehensive Management - conservative, medical, surgical).
+3. **Flexible Formatting**: Match structure naturally to the topic:
+   - For conditions/prolapses (e.g., Rectocele, Uterine Prolapse): Detail the anatomical defect, clinical presentation (symptoms/signs), grading, diagnostic evaluation, and step-by-step management.
+   - For classifications/types: Define each grade or type in full detail rather than just listing names.
+4. **No Omissions**: Expand upon all retrieved context. If a user asks a broad topic, cover all sub-aspects completely as expected in an MBBS/MD examination paper.
+5. **Citation Requirement**: Strictly append `{citation_line}` as a final line at the end of the text.
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
