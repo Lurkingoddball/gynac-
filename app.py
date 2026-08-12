@@ -41,7 +41,7 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. EXACT GEMINI STYLING ---
+# --- 5. EXACT GEMINI STYLING & TAB FIXES ---
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
@@ -58,7 +58,7 @@ st.markdown("""
         font-size: 2.8rem;
         font-weight: 400;
         color: #1f1f1f;
-        margin-top: 10vh;
+        margin-top: 8vh;
         margin-bottom: 0.2rem;
         letter-spacing: -0.5px;
     }
@@ -107,6 +107,22 @@ st.markdown("""
         max-width: 850px !important;
         padding-top: 1rem !important;
     }
+
+    /* Make Admin Tabs look like prominent clickable buttons */
+    button[data-baseweb="tab"] {
+        background-color: #f0f4f9 !important;
+        border-radius: 20px !important;
+        padding: 8px 24px !important;
+        font-weight: 600 !important;
+        margin-right: 10px !important;
+        border: 1px solid #dce1e7 !important;
+    }
+
+    button[aria-selected="true"] {
+        background-color: #0b57d0 !important;
+        color: white !important;
+        border: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -122,12 +138,16 @@ if "current_chat_id" not in st.session_state:
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
+if "admin_active_tab" not in st.session_state:
+    st.session_state.admin_active_tab = "💬 Chat Interface"
+
 # --- 7. SIDEBAR (CHAT HISTORY & ADMIN AUTH) ---
 with st.sidebar:
     if st.button("➕ New chat", use_container_width=True):
         new_id = str(uuid.uuid4())
         st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
         st.session_state.current_chat_id = new_id
+        st.session_state.admin_active_tab = "💬 Chat Interface"
         st.rerun()
 
     st.markdown('<div class="sidebar-header">Recent Chats</div>', unsafe_allow_html=True)
@@ -139,6 +159,7 @@ with st.sidebar:
         
         if st.button(btn_label, key=cid, use_container_width=True):
             st.session_state.current_chat_id = cid
+            st.session_state.admin_active_tab = "💬 Chat Interface"
             st.rerun()
 
     st.divider()
@@ -161,31 +182,36 @@ with st.sidebar:
                 st.session_state.admin_logged_in = False
                 st.rerun()
 
-# --- 8. MAIN INTERFACE ---
+# --- 8. MAIN INTERFACE & NAVIGATION ---
 current_chat = st.session_state.chats[st.session_state.current_chat_id]
 messages = current_chat["messages"]
 
+# Configure view mode
 if st.session_state.admin_logged_in:
-    admin_tab, chat_tab = st.tabs(["📊 Backend Analytics", "💬 Chat Interface"])
+    tab_selection = st.radio(
+        "Navigation",
+        ["💬 Chat Interface", "📊 Backend Analytics"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+    show_analytics = (tab_selection == "📊 Backend Analytics")
 else:
-    admin_tab = None
-    chat_tab = st.container()
+    show_analytics = False
 
-# Admin View
-if st.session_state.admin_logged_in and admin_tab:
-    with admin_tab:
-        st.title("Backend Query Logs")
-        col1, col2 = st.columns(2)
-        col1.metric("Active Chat Sessions", len(st.session_state.chats))
-        total_q = sum(len(c["messages"]) // 2 for c in st.session_state.chats.values())
-        col2.metric("Total User Queries", total_q)
-        st.divider()
-        for cid, data in st.session_state.chats.items():
-            with st.expander(f"Session ID: {cid} - Title: {data['title']}"):
-                st.json(data["messages"])
+# Analytics View
+if st.session_state.admin_logged_in and show_analytics:
+    st.title("Backend Query Logs")
+    col1, col2 = st.columns(2)
+    col1.metric("Active Chat Sessions", len(st.session_state.chats))
+    total_q = sum(len(c["messages"]) // 2 for c in st.session_state.chats.values())
+    col2.metric("Total User Queries", total_q)
+    st.divider()
+    for cid, data in st.session_state.chats.items():
+        with st.expander(f"Session ID: {cid} - Title: {data['title']}"):
+            st.json(data["messages"])
 
 # Chat Interface View
-with (chat_tab if st.session_state.admin_logged_in else st.container()):
+else:
     if len(messages) == 0:
         st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
         st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
@@ -204,17 +230,17 @@ with (chat_tab if st.session_state.admin_logged_in else st.container()):
         st.rerun()
 
 # --- 9. RAG RESPONSE GENERATION ENGINE ---
-if len(messages) > 0 and messages[-1]["role"] == "user":
+if not show_analytics and len(messages) > 0 and messages[-1]["role"] == "user":
     user_prompt = messages[-1]["content"]
     
     with st.chat_message("assistant", avatar="✨"):
         with st.spinner("Searching DC Dutta & generating detailed response..."):
             try:
-                # 1. Build context search query from previous interactions
+                # 1. Build contextual query
                 recent_user_queries = [m["content"] for m in messages if m["role"] == "user"]
                 search_query = f"{recent_user_queries[-2]} {user_prompt}" if len(recent_user_queries) > 1 else user_prompt
 
-                # 2. Reconstruct chat history string safely within execution scope
+                # 2. Build history text
                 chat_history_str = ""
                 for msg in messages[:-1][-6:]:
                     role_label = "Student" if msg["role"] == "user" else "Tutor"
@@ -223,7 +249,7 @@ if len(messages) > 0 and messages[-1]["role"] == "user":
                 if not chat_history_str:
                     chat_history_str = "None (Start of conversation)."
 
-                # 3. Retrieve context documents
+                # 3. Retrieve context
                 docs = vector_db.similarity_search(search_query, k=10)
                 
                 context_blocks = []
