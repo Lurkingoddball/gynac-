@@ -124,13 +124,12 @@ if "admin_logged_in" not in st.session_state:
 if "view_mode" not in st.session_state:
     st.session_state.view_mode = "chat"
 
-# Fix session state fallback if current chat is deleted or corrupted
 if st.session_state.current_chat_id not in st.session_state.chats:
     new_id = str(uuid.uuid4())
     st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
     st.session_state.current_chat_id = new_id
 
-# --- 7. SIDEBAR (CHAT MANAGEMENT & ADMIN) ---
+# --- 7. SIDEBAR ---
 with st.sidebar:
     if st.button("➕ New chat", use_container_width=True):
         new_id = str(uuid.uuid4())
@@ -183,7 +182,6 @@ with st.sidebar:
 
 # --- 8. MAIN VIEW ROUTING ---
 if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics":
-    # --- ADMIN ANALYTICS DASHBOARD ---
     st.title("⚙️ Backend Admin Analytics")
     
     col1, col2, col3 = st.columns(3)
@@ -205,7 +203,6 @@ if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics
             st.json(data["messages"])
 
 else:
-    # --- STUDENT CHAT INTERFACE ---
     current_chat = st.session_state.chats[st.session_state.current_chat_id]
     messages = current_chat["messages"]
 
@@ -214,30 +211,23 @@ else:
         st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
         st.markdown('<div class="source-credit">Source: DC Dutta</div>', unsafe_allow_html=True)
 
-    # Render history
     for msg in messages:
         avatar = "🎓" if msg["role"] == "user" else "✨"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    # User Input Handling
     if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
-        # Set chat title on first message
         if current_chat["title"] == "New Chat":
             current_chat["title"] = prompt[:25]
 
-        # Append User Message
         messages.append({"role": "user", "content": prompt})
         
-        # Display User Message immediately
         with st.chat_message("user", avatar="🎓"):
             st.markdown(prompt)
 
-        # Generate Assistant Response inline
         with st.chat_message("assistant", avatar="✨"):
-            with st.spinner("Searching DC Dutta & generating detailed response..."):
+            with st.spinner("Searching DC Dutta & generating response..."):
                 try:
-                    # Context assembly
                     history_context = ""
                     for m in messages[:-1][-6:]:
                         role_str = "Student" if m["role"] == "user" else "Tutor"
@@ -246,7 +236,6 @@ else:
                     if not history_context:
                         history_context = "No prior context."
 
-                    # Vector DB Query
                     docs = vector_db.similarity_search(prompt, k=10)
                     
                     context_blocks = []
@@ -277,8 +266,7 @@ else:
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-                    full_prompt = f"""You are an elite Medical AI Tutor specialized in Obstetrics and Gynecology based strictly on DC Dutta's Textbook.
-Provide highly detailed, medical-school grade explanations. Do NOT provide brief summaries.
+                    full_prompt = f"""You are an expert Medical Tutor in Obstetrics & Gynecology based strictly on DC Dutta's Textbook.
 
 === CONVERSATION HISTORY ===
 {history_context}
@@ -286,13 +274,18 @@ Provide highly detailed, medical-school grade explanations. Do NOT provide brief
 === RETRIEVED TEXTBOOK CONTEXT ===
 {context_text}
 
-=== CURRENT QUESTION ===
+=== USER QUESTION ===
 {prompt}
 
-=== INSTRUCTIONS ===
-1. Maintain continuity with the conversation history.
-2. Structure answers with medical headings (Definition, Etiology, Clinical Features, Management).
-3. Strictly include `{citation_line}` at the end.
+=== FORMATTING & CONTENT GUIDELINES ===
+1. **Strict Medical Accuracy**: Answer strictly using factual knowledge from DC Dutta's textbook context provided above.
+2. **Adaptive Formatting**: Choose the structural layout that BEST suits the specific question type:
+   - For **list/use/indication queries** (e.g., "uses of pessary"): Use concise bullet points with clear bold headers for each point or category.
+   - For **disease/condition queries** (e.g., "Preeclampsia"): Use appropriate clinical subheadings (e.g., Definition, Clinical Features, Management, Complications).
+   - For **comparisons** (e.g., "difference between X and Y"): Use a clean Markdown table or side-by-side bulleted comparisons.
+   - For **brief factual/definition queries**: Give a direct, clear paragraph followed by relevant details.
+3. **Natural Tone**: Avoid forcing irrelevant sections (e.g., do NOT include 'Etiology' or 'Management' headers when asked purely for a definition or a list of uses).
+4. **Citation**: Strictly append `{citation_line}` at the very end of your response.
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
