@@ -17,7 +17,7 @@ ADMIN_PASSWORD = "Aryan@2026"
 # --- 3. CUSTOM GEMINI-STYLE CSS ---
 st.markdown("""
 <style>
-    /* Hide default Streamlit elements */
+    /* Hide default Streamlit header and footer */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -54,7 +54,7 @@ st.markdown("""
         margin-bottom: 3rem;
     }
 
-    /* Floating Input Styling */
+    /* Floating Search Pill Input */
     .stChatInputContainer {
         border-radius: 28px !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
@@ -196,7 +196,7 @@ with (chat_tab if st.session_state.admin_logged_in else st.container()):
         messages.append({"role": "user", "content": prompt})
         st.rerun()
 
-# --- 7. CLEAN RESPONSE GENERATION TRIGGER ---
+# --- 7. RESPONSE GENERATION TRIGGER ---
 if len(messages) > 0 and messages[-1]["role"] == "user":
     user_prompt = messages[-1]["content"]
     
@@ -204,15 +204,17 @@ if len(messages) > 0 and messages[-1]["role"] == "user":
         with st.spinner("Analyzing DC Dutta knowledge base..."):
             try:
                 from langchain_community.vectorstores import Chroma
-                from langchain_community.embeddings import LocalFileEmbeddings # or standard fallback
+                from langchain_community.embeddings import HuggingFaceEmbeddings
                 from langchain_groq import ChatGroq
 
-                # Load Chroma VectorDB using community module standard
-                db = Chroma(persist_directory="dutta_vector_db")
+                # Load embeddings and vector database using standard community imports
+                embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+                db = Chroma(persist_directory="dutta_vector_db", embedding_function=embeddings)
+                
                 docs = db.similarity_search(user_prompt, k=3)
                 context_text = "\n\n".join([doc.page_content for doc in docs]) if docs else "No direct matching context found."
 
-                # Get Groq API Key
+                # Retrieve Groq API Key
                 groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
                 llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
 
