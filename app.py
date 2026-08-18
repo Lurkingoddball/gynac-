@@ -38,14 +38,14 @@ def log_interaction(chat_id, query, status):
         "status": status
     })
 
-# --- 3. RETRIEVE GROQ API KEY & CLIENT ---
+# --- 3. RETRIEVE GROQ API KEY ---
 groq_api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
 
 if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# --- 4. DYNAMIC MODEL DISCOVERY & INITIALIZATION ---
+# --- 4. MODEL & VECTOR DB INITIALIZATION ---
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -84,7 +84,7 @@ def get_pdf_page_image(pdf_path, page_num):
     except Exception:
         return None
 
-# --- 5. ENHANCED CUSTOM UI STYLING ---
+# --- 5. CUSTOM UI STYLING ---
 st.markdown("""
 <style>
     .stApp {
@@ -113,17 +113,10 @@ st.markdown("""
         background-color: #FFFFFF;
         border-right: 1px solid #E2E8F0;
     }
-    .pdf-card {
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 6. SIDEBAR NAVIGATION & CHAT MANAGEMENT ---
+# --- 6. SIDEBAR NAVIGATION ---
 with st.sidebar:
     st.title("🎓 DC Dutta Assistant")
     
@@ -165,7 +158,7 @@ with st.sidebar:
                 st.session_state.view_mode = "chat"
                 st.rerun()
 
-# --- 7. ADMIN ANALYTICAL DASHBOARD VIEW ---
+# --- 7. ADMIN DASHBOARD ---
 if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics":
     st.title("📊 Admin Analytics Dashboard")
     st.write(f"Total Logged Interactions: {len(st.session_state.interaction_logs)}")
@@ -219,11 +212,7 @@ else:
         with st.chat_message("assistant", avatar="✨"):
             with st.spinner("Searching DC Dutta & generating clinical breakdown..."):
                 try:
-                    user_queries = [m["content"] for m in messages if m["role"] == "user"]
-                    last_user_topic = user_queries[-2] if len(user_queries) >= 2 else ""
-                    search_query = f"{last_user_topic} {prompt}".strip()
-                    
-                    docs = vector_db.similarity_search(search_query, k=5)
+                    docs = vector_db.similarity_search(prompt, k=5)
                     
                     history_context = ""
                     for m in messages[:-1][-4:]:
@@ -239,10 +228,12 @@ else:
                     
                     for doc in docs:
                         meta = doc.metadata or {}
-                        # Check all standard metadata keys for page numbers
-                        page_val = meta.get("page") if meta.get("page") is not None else meta.get("page_number")
-                        if page_val is None:
-                            page_val = meta.get("source_page")
+                        # Dynamic page key search
+                        page_val = None
+                        for key in ["page", "page_number", "source_page", "Page"]:
+                            if key in meta and meta[key] is not None:
+                                page_val = meta[key]
+                                break
                         
                         if page_val is not None:
                             try:
@@ -265,7 +256,7 @@ else:
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing highly detailed, comprehensive, and exhaustive exam answers derived strictly from DC Dutta's Textbook.
+                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing highly detailed, comprehensive medical answers derived strictly from DC Dutta's Textbook.
 
 CONVERSATION HISTORY:
 {history_context}
@@ -277,8 +268,9 @@ USER QUESTION:
 {prompt}
 
 INSTRUCTIONS:
-- Do NOT provide brief or summarized answers. Provide exhaustive, textbook-level detail covering Definition, Etiology, Pathophysiology, Clinical Features, Diagnosis, Management, and Complications where relevant.
-- Use clean Markdown formatting with bold headers and clear bullet points.
+- Do NOT use HTML tables, <br> tags, or brief summaries.
+- Provide comprehensive, long-form clinical explanations with clear Markdown headings (e.g., Definition, Etiology, Physiological Changes, Management).
+- Use detailed bullet points and write full paragraphs for each clinical section.
 - Strictly append `{citation_line}` at the end.
 """
                     response = llm.invoke(full_prompt)
