@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. ADMIN CREDENTIALS & LOG FILE ---
+# --- 2. ADMIN CREDENTIALS & GLOBAL LOG FILE ---
 ADMIN_USERNAME = "aryan_admin"
 ADMIN_PASSWORD = "Aryan@2026"
 LOG_FILE = "global_seminar_logs.csv"
@@ -27,14 +27,17 @@ if not os.path.exists(LOG_FILE):
     df.to_csv(LOG_FILE, index=False)
 
 def log_interaction(session_id, user_query, status):
-    """Logs student activity to a shared global file."""
-    new_entry = pd.DataFrame([{
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "session_id": session_id,
-        "user_query": user_query,
-        "response_status": status
-    }])
-    new_entry.to_csv(LOG_FILE, mode='a', header=False, index=False)
+    """Logs student activity across all devices to a shared global file."""
+    try:
+        new_entry = pd.DataFrame([{
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "session_id": session_id,
+            "user_query": user_query,
+            "response_status": status
+        }])
+        new_entry.to_csv(LOG_FILE, mode='a', header=False, index=False)
+    except Exception:
+        pass
 
 # --- 3. RETRIEVE GROQ API KEY ---
 groq_api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
@@ -51,28 +54,124 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    # Using Llama 3.3 70B for higher seminar throughput
+    # Using Llama 3.3 70B Versatile for high throughput and seminar capacity
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="llama-3.3-70b-versatile",
         temperature=0.1,
-        max_tokens=3000
+        max_tokens=2500
     )
     return vector_db, llm
 
 vector_db, llm = init_rag()
 
-# --- 5. STYLING ---
+# --- 5. COMPREHENSIVE CSS & UI STYLING ---
 st.markdown("""
 <style>
-    html, body, .stApp { overscroll-behavior-y: none !important; }
-    header[data-testid="stHeader"] { background: transparent !important; z-index: 99 !important; }
-    footer, #MainMenu, [data-testid="stStatusWidget"] { display: none !important; }
-    .stApp { background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%); }
-    .main .block-container { max-width: 800px !important; margin: 0 auto; padding-bottom: 140px !important; }
+    html, body, .stApp {
+        overscroll-behavior-y: none !important;
+        touch-action: pan-x pan-y !important;
+    }
+
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        z-index: 99 !important;
+    }
+    
+    button[data-testid="stHeaderNavButton"], 
+    button[data-testid="baseButton-header"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    footer { display: none !important; }
+    #MainMenu { display: none !important; }
+    [data-testid="stStatusWidget"] { display: none !important; }
+    .stAppBadge { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    div[class*="viewerBadge"] { display: none !important; }
+    button[title="View source on GitHub"] { display: none !important; }
+    .stActionButton { display: none !important; }
+    .stAppHostBadge { display: none !important; }
+    iframe[title="Streamlit App Badge"] { display: none !important; }
+    #manage-app-button { display: none !important; }
+    div[data-testid="stDecoration"] { display: none !important; }
+
+    .stApp {
+        background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
+        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    }
+
+    .main .block-container, [data-testid="stMainBlockContainer"] {
+        max-width: 800px !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+        padding-top: 1rem !important;
+        padding-bottom: 140px !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    div[data-testid="stChatMessage"] {
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        word-break: break-word !important;
+    }
+
+    .main-title {
+        text-align: center;
+        font-size: clamp(1.6rem, 5vw, 2.5rem);
+        font-weight: 500;
+        color: #1f1f1f;
+        margin-top: 1vh;
+        margin-bottom: 0.2rem;
+    }
+    
+    .sub-credit {
+        text-align: center;
+        font-size: clamp(0.85rem, 3vw, 1rem);
+        font-weight: 500;
+        color: #0b57d0;
+        margin-bottom: 0.2rem;
+    }
+    
+    .source-credit {
+        text-align: center;
+        font-size: clamp(0.75rem, 2.5vw, 0.9rem);
+        color: #5f6368;
+        margin-bottom: 1.5rem;
+    }
+
     .stChatInputContainer {
-        border-radius: 28px !important; box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
-        position: fixed !important; bottom: 15px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 999 !important;
+        border-radius: 28px !important;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+        border: 1px solid #e0e2e5 !important;
+        background-color: #ffffff !important;
+        padding: 4px !important;
+        width: 92% !important;
+        max-width: 760px !important;
+        position: fixed !important;
+        bottom: 15px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 999 !important;
+    }
+
+    section[data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+        border-right: 1px solid #e9ecef;
+        z-index: 99999 !important;
+    }
+
+    .sidebar-header {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #5f6368;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -92,6 +191,11 @@ if "admin_logged_in" not in st.session_state:
 if "view_mode" not in st.session_state:
     st.session_state.view_mode = "chat"
 
+if st.session_state.current_chat_id not in st.session_state.chats:
+    new_id = str(uuid.uuid4())
+    st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
+    st.session_state.current_chat_id = new_id
+
 # --- 7. SIDEBAR (NAVIGATION & ADMIN) ---
 with st.sidebar:
     if st.button("➕ New chat", use_container_width=True):
@@ -100,6 +204,18 @@ with st.sidebar:
         st.session_state.current_chat_id = new_id
         st.session_state.view_mode = "chat"
         st.rerun()
+
+    st.markdown('<div class="sidebar-header">Recent Chats</div>', unsafe_allow_html=True)
+
+    for cid, chat_data in list(st.session_state.chats.items())[::-1]:
+        title = chat_data["title"][:20] + "..." if len(chat_data["title"]) > 20 else chat_data["title"]
+        is_active = (cid == st.session_state.current_chat_id and st.session_state.view_mode == "chat")
+        btn_label = f"🗣️ {title}" if is_active else f"💬 {title}"
+        
+        if st.button(btn_label, key=f"chat_nav_{cid}", use_container_width=True):
+            st.session_state.current_chat_id = cid
+            st.session_state.view_mode = "chat"
+            st.rerun()
 
     st.divider()
 
@@ -134,20 +250,18 @@ with st.sidebar:
 if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics":
     st.title("📊 Live Seminar Admin Dashboard")
     
-    # Load global logs
     if os.path.exists(LOG_FILE):
         logs_df = pd.read_csv(LOG_FILE)
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Unique Seminar Devices", logs_df["session_id"].nunique())
+        c1.metric("Unique Seminar Devices", logs_df["session_id"].nunique() if not logs_df.empty else 0)
         c2.metric("Total Questions Asked", len(logs_df))
-        c3.metric("Successful Responses", len(logs_df[logs_df["response_status"] == "Success"]))
+        c3.metric("Successful Responses", len(logs_df[logs_df["response_status"] == "Success"]) if not logs_df.empty else 0)
         
         st.divider()
-        st.subheader("📥 Live Activity Feed")
+        st.subheader("📥 Live Global Activity Log")
         st.dataframe(logs_df.sort_index(ascending=False), use_container_width=True)
         
-        # Download button for post-seminar review
         csv_data = logs_df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="💾 Download Seminar Log CSV",
@@ -157,15 +271,16 @@ if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics
             use_container_width=True
         )
     else:
-        st.info("No seminar logs recorded yet.")
+        st.info("No seminar activity recorded yet.")
 
 else:
     current_chat = st.session_state.chats[st.session_state.current_chat_id]
     messages = current_chat["messages"]
 
     if len(messages) == 0:
-        st.markdown('<div style="text-align:center; font-size: 2rem; font-weight: bold;">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
-        st.markdown('<div style="text-align:center; color: #0b57d0;">Made by Aryan Jadhav | DC Dutta Source</div>', unsafe_allow_html=True)
+        st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
+        st.markdown('<div class="source-credit">Source: DC Dutta</div>', unsafe_allow_html=True)
 
     for msg in messages:
         avatar = "🎓" if msg["role"] == "user" else "✨"
@@ -184,20 +299,51 @@ else:
         with st.chat_message("assistant", avatar="✨"):
             with st.spinner("Searching DC Dutta & retrieving details..."):
                 try:
+                    # 1. Combine recent user query context to ensure follow-ups stay on topic
                     user_queries = [m["content"] for m in messages if m["role"] == "user"]
                     last_user_topic = user_queries[-2] if len(user_queries) >= 2 else ""
-                    
                     search_query = f"{last_user_topic} {prompt}".strip()
+                    
+                    # Search vector DB with 5 relevant chunks
                     docs = vector_db.similarity_search(search_query, k=5)
                     
+                    # 2. Build lightweight history context
                     history_context = ""
                     for m in messages[:-1][-4:]:
                         role_str = "Student" if m["role"] == "user" else "Tutor"
                         content_str = m['content'] if m['role'] == 'user' else m['content'][:150] + "..."
                         history_context += f"{role_str}: {content_str}\n"
+                    
+                    if not history_context:
+                        history_context = "None"
 
-                    context_blocks = [f"[Page {doc.metadata.get('page', 'N/A')}]\n{doc.page_content[:800]}" for doc in docs]
+                    context_blocks = []
+                    page_numbers = set()
+                    
+                    for doc in docs:
+                        meta = doc.metadata or {}
+                        page_val = meta.get("page") or meta.get("page_number") or meta.get("source_page")
+                        
+                        if page_val is not None and str(page_val).strip() != "":
+                            try:
+                                p_int = int(page_val) + 1
+                                page_numbers.add(str(p_int))
+                                p_str = str(p_int)
+                            except ValueError:
+                                page_numbers.add(str(page_val))
+                                p_str = str(page_val)
+                        else:
+                            p_str = "N/A"
+                        
+                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content[:800]}")
+
                     context_text = "\n\n".join(context_blocks)
+                    
+                    if page_numbers:
+                        pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
+                        citation_line = f"📌 **Source Citation**: DC Dutta Obstetrics & Gynecology (Page(s): {pages_ref})"
+                    else:
+                        citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
                     full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing medical exam answers derived from DC Dutta's Textbook.
 
@@ -211,18 +357,21 @@ USER QUESTION:
 {prompt}
 
 INSTRUCTIONS:
-- Answer the user's question directly in relation to the ongoing clinical topic.
-- Provide a detailed, structured medical answer.
-- Understand Hinglish/Hindi queries (e.g. "investigation batao"). Respond in clear English.
-- Append source citation at the bottom.
+- Answer the user's question directly in relation to the ongoing clinical topic in the conversation history.
+- Provide a detailed, structured medical answer (Etiology, Clinical Features, Diagnosis/Investigations, Management) as appropriate.
+- Understand Hinglish/Hindi queries (e.g., "investigation batao"). Respond in clear, professional English.
+- Strictly append `{citation_line}` at the end.
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
 
+                    # Strip reasoning tags (<think>...</think>) if present
                     if "<think>" in response_text:
-                        response_text = re.sub(r"<think>.*?</think>", "", response_text, flags=re.DOTALL).strip()
+                        response_text = re.sub(
+                            r"<think>.*?</think>", "", response_text, flags=re.DOTALL
+                        ).strip()
 
-                    # Log success to shared admin backend
+                    # Log success to shared backend file
                     log_interaction(st.session_state.current_chat_id, prompt, "Success")
 
                 except Exception as e:
