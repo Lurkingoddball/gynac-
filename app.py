@@ -55,20 +55,22 @@ def init_rag():
         embedding_function=embeddings
     )
     
-    # Query Groq API directly for active models on your account
     from groq import Groq
     client = Groq(api_key=groq_api_key)
     active_models = [m.id for m in client.models.list().data if getattr(m, 'active', True)]
     
-    # Filter out whisper or audio models if present
-    text_models = [m for m in active_models if "whisper" not in m.lower()]
+    # Filter strictly for reliable text-chat model prefixes
+    allowed_prefixes = ("llama", "mixtral", "gemma")
+    chat_models = [
+        m for m in active_models 
+        if any(m.lower().startswith(p) for p in allowed_prefixes)
+    ]
     
-    if not text_models:
-        st.error("No active text models found on this Groq account.")
+    if not chat_models:
+        st.error("No active Llama/Mixtral/Gemma models found on this Groq account.")
         st.stop()
 
-    # Pick the first available active model dynamically
-    selected_model = text_models[0]
+    selected_model = chat_models[0]
     
     llm = ChatGroq(
         groq_api_key=groq_api_key,
