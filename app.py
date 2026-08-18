@@ -57,10 +57,7 @@ def init_rag():
     from groq import Groq
     client = Groq(api_key=groq_api_key)
     
-    # Query all models available on your account
-    all_models = [m.id for m in client.models.list().data]
-    
-    # Target high-reliability chat production models on Groq
+    # Priority list of active production chat models
     priority_models = [
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
@@ -68,25 +65,22 @@ def init_rag():
         "mixtral-8x7b-32768"
     ]
     
+    available_models = [m.id for m in client.models.list().data]
     selected_model = None
+    
     for pm in priority_models:
-        if pm in all_models:
+        if pm in available_models:
             selected_model = pm
             break
             
-    # Fallback to the first available model if priorities miss
-    if not selected_model and all_models:
-        selected_model = all_models[0]
-
     if not selected_model:
-        st.error("No models available on this Groq account key.")
-        st.stop()
+        selected_model = "llama-3.1-8b-instant"
 
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name=selected_model,
         temperature=0.1,
-        max_tokens=2500
+        max_tokens=1000  # Set conservatively to 1000 to prevent token limits on smaller models
     )
     
     return vector_db, llm
@@ -109,20 +103,57 @@ def get_pdf_page_image(pdf_path, page_num):
         st.warning(f"Unable to render PDF page {page_num}: {e}")
     return None
 
-# --- 5. COMPREHENSIVE CSS & UI STYLING ---
+# --- 5. ENHANCED CUSTOM UI STYLING ---
 st.markdown("""
 <style>
-    .main-title { font-size: 2.2rem; font-weight: 700; color: #1E293B; margin-bottom: 0.2rem; }
-    .sub-credit { font-size: 1rem; color: #64748B; margin-bottom: 0.1rem; }
-    .source-credit { font-size: 0.9rem; color: #94A3B8; margin-bottom: 2rem; font-style: italic; }
+    /* Global styles */
+    .stApp {
+        background-color: #FAFAFA;
+    }
+    
+    /* Title and Subtitles */
+    .main-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #1E293B;
+        margin-bottom: 0.1rem;
+        letter-spacing: -0.5px;
+    }
+    .sub-credit {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #0284C7;
+        margin-bottom: 0.2rem;
+    }
+    .source-credit {
+        font-size: 0.95rem;
+        color: #64748B;
+        margin-bottom: 2rem;
+        font-style: italic;
+    }
+    
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #FFFFFF;
+        border-right: 1px solid #E2E8F0;
+    }
+    
+    /* PDF Container Card */
+    .pdf-card {
+        background-color: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 6. SIDEBAR NAVIGATION & CHAT MANAGEMENT ---
 with st.sidebar:
-    st.title("📚 DC Dutta Assistant")
+    st.title("🎓 DC Dutta Assistant")
     
-    if st.button("+ New Chat", use_container_width=True):
+    if st.button("➕ New Chat", use_container_width=True, type="primary"):
         new_id = f"chat_{len(st.session_state.chats) + 1}"
         st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
         st.session_state.current_chat_id = new_id
@@ -130,7 +161,7 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.subheader("Recent Chats")
+    st.caption("Recent Conversations")
     
     for c_id, c_data in list(st.session_state.chats.items()):
         btn_label = f"💬 {c_data['title']}"
@@ -143,8 +174,8 @@ with st.sidebar:
     with st.expander("🔒 Admin Panel"):
         if not st.session_state.admin_logged_in:
             admin_pass = st.text_input("Password", type="password")
-            if st.button("Login"):
-                if admin_pass == "admin123":  # Customize your admin password here
+            if st.button("Login", use_container_width=True):
+                if admin_pass == "admin123":
                     st.session_state.admin_logged_in = True
                     st.success("Logged in!")
                     st.rerun()
@@ -175,22 +206,22 @@ else:
     messages = current_chat["messages"]
 
     if len(messages) == 0:
-        st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
+        st.markdown('<div class="main-title">Gynaecology & Obstetrics</div>', unsafe_allow_html=True)
         st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
-        st.markdown('<div class="source-credit">Source: DC Dutta</div>', unsafe_allow_html=True)
+        st.markdown('<div class="source-credit">Source Citation: DC Dutta Textbook</div>', unsafe_allow_html=True)
 
-    # Render history
+    # Render previous messages
     for msg in messages:
         avatar = "🎓" if msg["role"] == "user" else "✨"
         with st.chat_message(msg["role"], avatar=avatar):
             pdf_pages = msg.get("pdf_pages", [])
             
             if pdf_pages:
-                col_text, col_pdf = st.columns([1.1, 0.9])
+                col_text, col_pdf = st.columns([1.2, 0.8])
                 with col_text:
                     st.markdown(msg["content"])
                 with col_pdf:
-                    st.markdown("### 📖 Textbook Page Preview")
+                    st.markdown("#### 📖 DC Dutta Page Preview")
                     for p_num in pdf_pages:
                         img = get_pdf_page_image("./dc_dutta.pdf", p_num)
                         if img:
@@ -209,7 +240,7 @@ else:
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="✨"):
-            with st.spinner("Searching DC Dutta & retrieving details..."):
+            with st.spinner("Searching DC Dutta & generating clinical breakdown..."):
                 try:
                     user_queries = [m["content"] for m in messages if m["role"] == "user"]
                     last_user_topic = user_queries[-2] if len(user_queries) >= 2 else ""
@@ -254,7 +285,7 @@ else:
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing medical exam answers derived from DC Dutta's Textbook.
+                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing concise medical exam answers derived from DC Dutta's Textbook.
 
 CONVERSATION HISTORY:
 {history_context}
@@ -266,9 +297,7 @@ USER QUESTION:
 {prompt}
 
 INSTRUCTIONS:
-- Answer the user's question directly in relation to the ongoing clinical topic in the conversation history.
-- Provide a detailed, structured medical answer (Etiology, Clinical Features, Diagnosis/Investigations, Management) as appropriate.
-- Understand Hinglish/Hindi queries (e.g., "investigation batao"). Respond in clear, professional English.
+- Provide a clear, structured medical breakdown.
 - Strictly append `{citation_line}` at the end.
 """
                     response = llm.invoke(full_prompt)
