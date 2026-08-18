@@ -38,7 +38,7 @@ def init_rag():
         groq_api_key=groq_api_key,
         model_name="qwen/qwen3.6-27b",
         temperature=0.1,
-        max_tokens=4096
+        max_tokens=3000
     )
     return vector_db, llm
 
@@ -282,17 +282,19 @@ else:
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="✨"):
-            with st.spinner("Searching DC Dutta & retrieving comprehensive details..."):
+            with st.spinner("Searching DC Dutta & retrieving details..."):
                 try:
+                    # Truncate history to only last 2 messages to save tokens
                     history_context = ""
-                    for m in messages[:-1][-6:]:
+                    for m in messages[:-1][-2:]:
                         role_str = "Student" if m["role"] == "user" else "Tutor"
-                        history_context += f"{role_str}: {m['content']}\n"
+                        history_context += f"{role_str}: {m['content'][:300]}\n"
                     
                     if not history_context:
-                        history_context = "No prior context."
+                        history_context = "None"
 
-                    docs = vector_db.similarity_search(prompt, k=15)
+                    # Reduced k from 15 to 6 to fit within Groq token limits (8000 TPM)
+                    docs = vector_db.similarity_search(prompt, k=6)
                     
                     context_blocks = []
                     page_numbers = set()
@@ -312,7 +314,8 @@ else:
                         else:
                             p_str = "N/A"
                         
-                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content}")
+                        # Limit individual document snippet length
+                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content[:1000]}")
 
                     context_text = "\n\n".join(context_blocks)
                     
@@ -322,25 +325,17 @@ else:
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing comprehensive, medical-school exam answers strictly derived from DC Dutta's Textbook.
+                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing medical exam answers derived from DC Dutta's Textbook.
 
-=== CONVERSATION HISTORY ===
-{history_context}
-
-=== RETRIEVED TEXTBOOK CONTEXT ===
+CONTEXT:
 {context_text}
 
-=== USER QUESTION ===
+USER QUESTION:
 {prompt}
 
-=== DETAILED ANSWER GUIDELINES ===
-1. **Comprehensiveness**: Provide a complete, highly detailed medical answer. Never give short, superficial summaries or brief bullet points unless explicitly asked for a quick list.
-2. **Textbook Fidelity**: Include all clinically relevant details mentioned in DC Dutta (Anatomy, Pathophysiology, Grades/Degrees, Etiology, Clinical Features, Diagnosis, Differential Diagnosis, and Comprehensive Management - conservative, medical, surgical).
-3. **Flexible Formatting**: Match structure naturally to the topic:
-   - For conditions/prolapses (e.g., Rectocele, Uterine Prolapse): Detail the anatomical defect, clinical presentation (symptoms/signs), grading, diagnostic evaluation, and step-by-step management.
-   - For classifications/types: Define each grade or type in full detail rather than just listing names.
-4. **No Omissions**: Expand upon all retrieved context. If a user asks a broad topic, cover all sub-aspects completely as expected in an MBBS/MD examination paper.
-5. **Citation Requirement**: Strictly append `{citation_line}` as a final line at the end of the text.
+INSTRUCTIONS:
+- Give a detailed, structured medical answer covering Etiology, Clinical Features, Diagnosis, and Management.
+- Strictly append `{citation_line}` at the end.
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
