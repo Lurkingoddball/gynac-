@@ -79,22 +79,13 @@ def init_rag():
     return vector_db, llm
 
 vector_db, llm = init_rag()
-
-# --- 4B. PDF RENDERING HELPER ---
 @st.cache_data(show_spinner=False)
 def get_pdf_page_image(pdf_path, page_num):
-    """Converts a specific PDF page to an image for inline display."""
     try:
-        images = convert_from_path(
-            pdf_path, 
-            first_page=page_num, 
-            last_page=page_num
-        )
-        if images:
-            return images[0]
-    except Exception as e:
-        st.warning(f"Unable to render PDF page {page_num}: {e}")
-    return None
+        images = convert_from_path(pdf_path, first_page=page_num, last_page=page_num)
+        return images[0] if images else None
+    except Exception:
+        return None
 
 # --- 5. ENHANCED CUSTOM UI STYLING ---
 st.markdown("""
@@ -204,23 +195,28 @@ else:
         st.markdown('<div class="source-credit">Source Citation: DC Dutta Textbook</div>', unsafe_allow_html=True)
 
     # Render previous messages
-    for msg in messages:
-        avatar = "🎓" if msg["role"] == "user" else "✨"
-        with st.chat_message(msg["role"], avatar=avatar):
-            pdf_pages = msg.get("pdf_pages", [])
+for msg in messages:
+    avatar = "🎓" if msg["role"] == "user" else "✨"
+    with st.chat_message(msg["role"], avatar=avatar):
+        # Extract page number list if stored in the message dictionary
+        pdf_pages = msg.get("pdf_pages", [])
+        
+        # If a page reference exists and message is from assistant, render side-by-side
+        if pdf_pages and msg["role"] == "assistant":
+            col_text, col_pdf = st.columns([1.2, 0.8])
             
-            if pdf_pages:
-                col_text, col_pdf = st.columns([1.2, 0.8])
-                with col_text:
-                    st.markdown(msg["content"])
-                with col_pdf:
-                    st.markdown("#### 📖 DC Dutta Page Preview")
-                    for p_num in pdf_pages:
-                        img = get_pdf_page_image("./dc_dutta.pdf", p_num)
-                        if img:
-                            st.image(img, caption=f"DC Dutta — Page {p_num}", use_container_width=True)
-            else:
+            with col_text:
                 st.markdown(msg["content"])
+                
+            with col_pdf:
+                # Load and render the exact page image
+                page_num = pdf_pages[0]
+                img = get_pdf_page_image("./dc_dutta.pdf", page_num)
+                if img:
+                    st.image(img, caption=f"DC Dutta — Page {page_num}", use_container_width=True)
+        else:
+            # Standard single-column display for user queries or answers without page refs
+            st.markdown(msg["content"])
 
     # Chat Input processing
     if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
@@ -309,10 +305,10 @@ INSTRUCTIONS:
                     log_interaction(st.session_state.current_chat_id, prompt, f"Error: {str(e)[:50]}")
 
                 top_page = page_numbers[:1] if page_numbers else []
-                
-                messages.append({
-                    "role": "assistant", 
-                    "content": response_text,
-                    "pdf_pages": top_page
-                })
-                st.rerun()
+
+messages.append({
+    "role": "assistant",
+    "content": response_text,
+    "pdf_pages": top_page  # Stores [page_num] so Step 3 can load the image
+})
+st.rerun()
