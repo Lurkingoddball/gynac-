@@ -45,7 +45,7 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# --- 4. MODEL INITIALIZATION ---
+# --- 4. MODEL INITIALIZATION (BULLETPROOF DYNAMIC SELECTOR) ---
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -54,34 +54,24 @@ def init_rag():
         embedding_function=embeddings
     )
     
-    # Target reliable text models with standard token limits
-    target_models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "mixtral-8x7b-32768"
-    ]
-    
-    selected_model = None
     from groq import Groq
     client = Groq(api_key=groq_api_key)
     
+    # Query Groq directly for all live models available on YOUR key
     try:
-        available = [m.id for m in client.models.list().data]
-        for tm in target_models:
-            if tm in available:
-                selected_model = tm
-                break
-    except Exception:
-        pass
-        
-    if not selected_model:
-        selected_model = "llama-3.3-70b-versatile"
+        live_models = client.models.list().data
+        # Grab the first model ID returned by Groq's API
+        selected_model = live_models[0].id
+    except Exception as e:
+        st.error(f"Could not retrieve models from Groq API: {e}")
+        st.stop()
 
+    # Initialize ChatGroq using the dynamically fetched model ID
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name=selected_model,
         temperature=0.1,
-        max_tokens=500  # Set to 500 to satisfy the strict max token limit
+        max_tokens=500  # Safe cap to prevent 400 context errors
     )
     
     return vector_db, llm
