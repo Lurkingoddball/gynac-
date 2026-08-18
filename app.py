@@ -54,26 +54,22 @@ def init_rag():
         embedding_function=embeddings
     )
     
-    # Query Groq API directly for active models on your account
     from groq import Groq
     client = Groq(api_key=groq_api_key)
     active_models = [m.id for m in client.models.list().data if getattr(m, 'active', True)]
-    
-    # Filter out whisper or audio models if present
     text_models = [m for m in active_models if "whisper" not in m.lower()]
     
     if not text_models:
         st.error("No active text models found on this Groq account.")
         st.stop()
 
-    # Pick the first available active model dynamically
     selected_model = text_models[0]
     
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name=selected_model,
-        temperature=0.1,
-        max_tokens=2500
+        temperature=0.2,
+        max_tokens=4000
     )
     
     return vector_db, llm
@@ -91,12 +87,9 @@ def get_pdf_page_image(pdf_path, page_num):
 # --- 5. ENHANCED CUSTOM UI STYLING ---
 st.markdown("""
 <style>
-    /* Global styles */
     .stApp {
         background-color: #FAFAFA;
     }
-    
-    /* Title and Subtitles */
     .main-title {
         font-size: 2.5rem;
         font-weight: 800;
@@ -116,14 +109,10 @@ st.markdown("""
         margin-bottom: 2rem;
         font-style: italic;
     }
-    
-    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF;
         border-right: 1px solid #E2E8F0;
     }
-    
-    /* PDF Container Card */
     .pdf-card {
         background-color: #FFFFFF;
         border: 1px solid #E2E8F0;
@@ -185,7 +174,7 @@ if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics
         st.session_state.view_mode = "chat"
         st.rerun()
 
-# --- 8. MAIN CHAT & SIDE-BY-SIDE PDF RENDER VIEW ---
+# --- 8. MAIN CHAT VIEW ---
 else:
     current_chat = st.session_state.chats[st.session_state.current_chat_id]
     messages = current_chat["messages"]
@@ -212,6 +201,8 @@ else:
                     img = get_pdf_page_image("./dc_dutta.pdf", page_num)
                     if img:
                         st.image(img, caption=f"DC Dutta — Page {page_num}", use_container_width=True)
+                    else:
+                        st.info(f"📄 Reference Page: DC Dutta (Page {page_num})")
             else:
                 st.markdown(msg["content"])
 
@@ -248,9 +239,12 @@ else:
                     
                     for doc in docs:
                         meta = doc.metadata or {}
-                        page_val = meta.get("page") or meta.get("page_number") or meta.get("source_page")
+                        # Check all standard metadata keys for page numbers
+                        page_val = meta.get("page") if meta.get("page") is not None else meta.get("page_number")
+                        if page_val is None:
+                            page_val = meta.get("source_page")
                         
-                        if page_val is not None and str(page_val).strip() != "":
+                        if page_val is not None:
                             try:
                                 p_int = int(page_val) + 1
                                 if p_int not in page_numbers:
@@ -261,7 +255,7 @@ else:
                         else:
                             p_str = "N/A"
                         
-                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content[:800]}")
+                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content}")
 
                     context_text = "\n\n".join(context_blocks)
                     
@@ -271,7 +265,7 @@ else:
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing concise medical exam answers derived from DC Dutta's Textbook.
+                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing highly detailed, comprehensive, and exhaustive exam answers derived strictly from DC Dutta's Textbook.
 
 CONVERSATION HISTORY:
 {history_context}
@@ -283,7 +277,8 @@ USER QUESTION:
 {prompt}
 
 INSTRUCTIONS:
-- Provide a clear, structured medical breakdown.
+- Do NOT provide brief or summarized answers. Provide exhaustive, textbook-level detail covering Definition, Etiology, Pathophysiology, Clinical Features, Diagnosis, Management, and Complications where relevant.
+- Use clean Markdown formatting with bold headers and clear bullet points.
 - Strictly append `{citation_line}` at the end.
 """
                     response = llm.invoke(full_prompt)
