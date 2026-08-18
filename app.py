@@ -72,12 +72,11 @@ def init_rag():
 
     selected_model = chat_models[0]
     
-    llm = ChatGroq(
-        groq_api_key=groq_api_key,
-        model_name=selected_model,
-        temperature=0.1,
-        max_tokens=2500
-    )
+   # Replace old model string with an active supported Groq model string
+llm = ChatGroq(
+    model="gemma2-9b-it",  # or "llama-3.3-70b-versatile"
+    groq_api_key=st.secrets["GROQ_API_KEY"],
+)
     
     return vector_db, llm
 
