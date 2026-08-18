@@ -54,10 +54,10 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    # Model switched to 'llama3-70b-8192' - universal active default on Groq
+    # Active, non-decommissioned Groq model
     llm = ChatGroq(
         groq_api_key=groq_api_key,
-        model_name="llama3-70b-8192",
+        model_name="llama-3.1-8b-instant",
         temperature=0.1,
         max_tokens=2500
     )
