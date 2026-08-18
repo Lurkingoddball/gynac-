@@ -45,9 +45,7 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# --- 4. DYNAMIC MODEL DISCOVERY & INITIALIZATION ---
-from langchain_core.messages import HumanMessage
-
+# --- 4. MODEL INITIALIZATION ---
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -59,40 +57,21 @@ def init_rag():
     from groq import Groq
     client = Groq(api_key=groq_api_key)
     
-    # Retrieve all available models from your account
-    available_models = [m.id for m in client.models.list().data if getattr(m, 'active', True)]
-    
-    # Filter for standard text chat models
-    chat_candidates = [
-        m for m in available_models 
-        if any(p in m.lower() for p in ["llama", "mixtral", "gemma"]) 
-        and "whisper" not in m.lower() 
-        and "vision" not in m.lower()
-        and "canopy" not in m.lower()
-    ]
-    
-    selected_llm = None
-    
-    # Correctly test access using HumanMessage format
-    for model_id in chat_candidates:
-        try:
-            temp_llm = ChatGroq(
-                groq_api_key=groq_api_key,
-                model_name=model_id,
-                temperature=0.1,
-                max_tokens=1000
-            )
-            temp_llm.invoke([HumanMessage(content="hi")])
-            selected_llm = temp_llm
-            break
-        except Exception:
-            continue
-            
-    if not selected_llm:
-        st.error("No compatible chat models accessible on this Groq API key.")
-        st.stop()
+    # Automatically pick the first available Llama model or fallback safely
+    try:
+        models = [m.id for m in client.models.list().data]
+        selected_model = next((m for m in models if "llama" in m.lower()), models[0] if models else "llama-3.1-8b-instant")
+    except Exception:
+        selected_model = "llama-3.1-8b-instant"
 
-    return vector_db, selected_llm
+    llm = ChatGroq(
+        groq_api_key=groq_api_key,
+        model_name=selected_model,
+        temperature=0.1,
+        max_tokens=1000
+    )
+    
+    return vector_db, llm
 
 vector_db, llm = init_rag()
 
