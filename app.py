@@ -1,43 +1,42 @@
 import os
 import re
-import uuid
-import pandas as pd
-from datetime import datetime
 import streamlit as st
-from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
 from langchain_groq import ChatGroq
+from pdf2image import convert_from_path
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Gynaecology and Obstetrics",
-    page_icon="✨",
-    layout="centered",
-    initial_sidebar_state="collapsed"
+    page_title="DC Dutta Gynaec-Obs Assistant",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --- 2. ADMIN CREDENTIALS & GLOBAL LOG FILE ---
-ADMIN_USERNAME = "aryan_admin"
-ADMIN_PASSWORD = "Aryan@2026"
-LOG_FILE = "global_seminar_logs.csv"
+# --- 2. SESSION STATE INITIALIZATION ---
+if "chats" not in st.session_state:
+    st.session_state.chats = {
+        "chat_1": {
+            "title": "New Chat",
+            "messages": []
+        }
+    }
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = "chat_1"
+if "admin_logged_in" not in st.session_state:
+    st.session_state.admin_logged_in = False
+if "view_mode" not in st.session_state:
+    st.session_state.view_mode = "chat"
+if "interaction_logs" not in st.session_state:
+    st.session_state.interaction_logs = []
 
-# Ensure global CSV log file exists
-if not os.path.exists(LOG_FILE):
-    df = pd.DataFrame(columns=["timestamp", "session_id", "user_query", "response_status"])
-    df.to_csv(LOG_FILE, index=False)
-
-def log_interaction(session_id, user_query, status):
-    """Logs student activity across all devices to a shared global file."""
-    try:
-        new_entry = pd.DataFrame([{
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "session_id": session_id,
-            "user_query": user_query,
-            "response_status": status
-        }])
-        new_entry.to_csv(LOG_FILE, mode='a', header=False, index=False)
-    except Exception:
-        pass
+def log_interaction(chat_id, query, status):
+    st.session_state.interaction_logs.append({
+        "chat_id": chat_id,
+        "query": query,
+        "status": status
+    })
 
 # --- 3. RETRIEVE GROQ API KEY & CLIENT ---
 groq_api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
@@ -57,38 +56,48 @@ def init_rag():
     
     from groq import Groq
     client = Groq(api_key=groq_api_key)
-    active_models = [m.id for m in client.models.list().data if getattr(m, 'active', True)]
     
-    # Filter strictly for reliable text-chat model prefixes
-    allowed_prefixes = ("llama", "mixtral", "gemma")
-    chat_models = [
-        m for m in active_models 
-        if any(m.lower().startswith(p) for p in allowed_prefixes)
+    # Query all models available on your account
+    all_models = [m.id for m in client.models.list().data]
+    
+    # Target high-reliability chat production models on Groq
+    priority_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3-70b-8192",
+        "mixtral-8x7b-32768"
     ]
     
-    if not chat_models:
-        st.error("No active Llama/Mixtral/Gemma models found on this Groq account.")
+    selected_model = None
+    for pm in priority_models:
+        if pm in all_models:
+            selected_model = pm
+            break
+            
+    # Fallback to the first available model if priorities miss
+    if not selected_model and all_models:
+        selected_model = all_models[0]
+
+    if not selected_model:
+        st.error("No models available on this Groq account key.")
         st.stop()
 
-    selected_model = chat_models[0]
-    
-   # Replace old model string with an active supported Groq model string
-llm = ChatGroq(
-    model="gemma2-9b-it",  # or "llama-3.3-70b-versatile"
-    groq_api_key=st.secrets["GROQ_API_KEY"],
-)
+    llm = ChatGroq(
+        groq_api_key=groq_api_key,
+        model_name=selected_model,
+        temperature=0.1,
+        max_tokens=2500
+    )
     
     return vector_db, llm
 
 vector_db, llm = init_rag()
-# =========================================================
-from pdf2image import convert_from_path
 
+# --- 4B. PDF RENDERING HELPER ---
 @st.cache_data(show_spinner=False)
 def get_pdf_page_image(pdf_path, page_num):
     """Converts a specific PDF page to an image for inline display."""
     try:
-        # Convert 1-based page number to 0-based index
         images = convert_from_path(
             pdf_path, 
             first_page=page_num, 
@@ -99,192 +108,68 @@ def get_pdf_page_image(pdf_path, page_num):
     except Exception as e:
         st.warning(f"Unable to render PDF page {page_num}: {e}")
     return None
-# =========================================================
+
 # --- 5. COMPREHENSIVE CSS & UI STYLING ---
 st.markdown("""
 <style>
-    html, body, .stApp {
-        overscroll-behavior-y: none !important;
-        touch-action: pan-x pan-y !important;
-    }
-
-    header[data-testid="stHeader"] {
-        background: transparent !important;
-        z-index: 99 !important;
-    }
-    
-    button[data-testid="stHeaderNavButton"], 
-    button[data-testid="baseButton-header"] {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-    }
-
-    footer { display: none !important; }
-    #MainMenu { display: none !important; }
-    [data-testid="stStatusWidget"] { display: none !important; }
-    .stAppBadge { display: none !important; }
-    [data-testid="stToolbar"] { display: none !important; }
-    div[class*="viewerBadge"] { display: none !important; }
-    button[title="View source on GitHub"] { display: none !important; }
-    .stActionButton { display: none !important; }
-    .stAppHostBadge { display: none !important; }
-    iframe[title="Streamlit App Badge"] { display: none !important; }
-    #manage-app-button { display: none !important; }
-    div[data-testid="stDecoration"] { display: none !important; }
-
-    .stApp {
-        background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
-        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-    }
-
-    .main .block-container, [data-testid="stMainBlockContainer"] {
-        max-width: 800px !important;
-        width: 100% !important;
-        margin: 0 auto !important;
-        padding-top: 1rem !important;
-        padding-bottom: 140px !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-    }
-
-    div[data-testid="stChatMessage"] {
-        max-width: 100% !important;
-        margin: 0 auto !important;
-        word-break: break-word !important;
-    }
-
-    .main-title {
-        text-align: center;
-        font-size: clamp(1.6rem, 5vw, 2.5rem);
-        font-weight: 500;
-        color: #1f1f1f;
-        margin-top: 1vh;
-        margin-bottom: 0.2rem;
-    }
-    
-    .sub-credit {
-        text-align: center;
-        font-size: clamp(0.85rem, 3vw, 1rem);
-        font-weight: 500;
-        color: #0b57d0;
-        margin-bottom: 0.2rem;
-    }
-    
-    .source-credit {
-        text-align: center;
-        font-size: clamp(0.75rem, 2.5vw, 0.9rem);
-        color: #5f6368;
-        margin-bottom: 1.5rem;
-    }
-
-    .stChatInputContainer {
-        border-radius: 28px !important;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
-        border: 1px solid #e0e2e5 !important;
-        background-color: #ffffff !important;
-        padding: 4px !important;
-        width: 92% !important;
-        max-width: 760px !important;
-        position: fixed !important;
-        bottom: 15px !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        z-index: 999 !important;
-    }
-
-    section[data-testid="stSidebar"] {
-        background-color: #f8f9fa;
-        border-right: 1px solid #e9ecef;
-        z-index: 99999 !important;
-    }
-
-    .sidebar-header {
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: #5f6368;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-top: 1rem;
-        margin-bottom: 0.5rem;
-    }
+    .main-title { font-size: 2.2rem; font-weight: 700; color: #1E293B; margin-bottom: 0.2rem; }
+    .sub-credit { font-size: 1rem; color: #64748B; margin-bottom: 0.1rem; }
+    .source-credit { font-size: 0.9rem; color: #94A3B8; margin-bottom: 2rem; font-style: italic; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 6. SESSION STATE INITIALIZATION ---
-if "chats" not in st.session_state:
-    st.session_state.chats = {}
-
-if "current_chat_id" not in st.session_state:
-    new_id = str(uuid.uuid4())
-    st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
-    st.session_state.current_chat_id = new_id
-
-if "admin_logged_in" not in st.session_state:
-    st.session_state.admin_logged_in = False
-
-if "view_mode" not in st.session_state:
-    st.session_state.view_mode = "chat"
-
-if st.session_state.current_chat_id not in st.session_state.chats:
-    new_id = str(uuid.uuid4())
-    st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
-    st.session_state.current_chat_id = new_id
-
-# --- 7. SIDEBAR (NAVIGATION & ADMIN) ---
+# --- 6. SIDEBAR NAVIGATION & CHAT MANAGEMENT ---
 with st.sidebar:
-    if st.button("➕ New chat", use_container_width=True):
-        new_id = str(uuid.uuid4())
+    st.title("📚 DC Dutta Assistant")
+    
+    if st.button("+ New Chat", use_container_width=True):
+        new_id = f"chat_{len(st.session_state.chats) + 1}"
         st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
         st.session_state.current_chat_id = new_id
         st.session_state.view_mode = "chat"
         st.rerun()
 
-    st.markdown('<div class="sidebar-header">Recent Chats</div>', unsafe_allow_html=True)
-
-    for cid, chat_data in list(st.session_state.chats.items())[::-1]:
-        title = chat_data["title"][:20] + "..." if len(chat_data["title"]) > 20 else chat_data["title"]
-        is_active = (cid == st.session_state.current_chat_id and st.session_state.view_mode == "chat")
-        btn_label = f"🗣️ {title}" if is_active else f"💬 {title}"
-        
-        if st.button(btn_label, key=f"chat_nav_{cid}", use_container_width=True):
-            st.session_state.current_chat_id = cid
+    st.markdown("---")
+    st.subheader("Recent Chats")
+    
+    for c_id, c_data in list(st.session_state.chats.items()):
+        btn_label = f"💬 {c_data['title']}"
+        if st.button(btn_label, key=f"nav_{c_id}", use_container_width=True):
+            st.session_state.current_chat_id = c_id
             st.session_state.view_mode = "chat"
             st.rerun()
 
-    st.divider()
-
+    st.markdown("---")
     with st.expander("🔒 Admin Panel"):
         if not st.session_state.admin_logged_in:
-            admin_user = st.text_input("Username", key="admin_user_input")
-            admin_pass = st.text_input("Password", type="password", key="admin_pass_input")
-            
-            if st.button("Login as Admin", use_container_width=True):
-                if admin_user == ADMIN_USERNAME and admin_pass == ADMIN_PASSWORD:
+            admin_pass = st.text_input("Password", type="password")
+            if st.button("Login"):
+                if admin_pass == "admin123":  # Customize your admin password here
                     st.session_state.admin_logged_in = True
-                    st.success("Authenticated!")
+                    st.success("Logged in!")
                     st.rerun()
                 else:
-                    st.error("Invalid Credentials")
+                    st.error("Incorrect password")
         else:
-            st.write("🟢 **Admin Authenticated**")
-            col_a, col_b = st.columns(2)
-            if col_a.button("📊 Analytics", use_container_width=True):
+            st.write("Logged in as Admin")
+            if st.button("View Analytics", use_container_width=True):
                 st.session_state.view_mode = "analytics"
                 st.rerun()
-            if col_b.button("💬 Chat Mode", use_container_width=True):
-                st.session_state.view_mode = "chat"
-                st.rerun()
-                
-            if st.button("Logout Admin", use_container_width=True):
+            if st.button("Logout", use_container_width=True):
                 st.session_state.admin_logged_in = False
                 st.session_state.view_mode = "chat"
                 st.rerun()
 
-# --- 8. MAIN VIEW ROUTING ---
+# --- 7. ADMIN ANALYTICAL DASHBOARD VIEW ---
 if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics":
-    # (Keep Admin Panel Analytics logic as is)
-    pass
+    st.title("📊 Admin Analytics Dashboard")
+    st.write(f"Total Logged Interactions: {len(st.session_state.interaction_logs)}")
+    st.dataframe(st.session_state.interaction_logs, use_container_width=True)
+    if st.button("Back to Chat"):
+        st.session_state.view_mode = "chat"
+        st.rerun()
+
+# --- 8. MAIN CHAT & SIDE-BY-SIDE PDF RENDER VIEW ---
 else:
     current_chat = st.session_state.chats[st.session_state.current_chat_id]
     messages = current_chat["messages"]
@@ -294,11 +179,10 @@ else:
         st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
         st.markdown('<div class="source-credit">Source: DC Dutta</div>', unsafe_allow_html=True)
 
-    # Render previous messages
+    # Render history
     for msg in messages:
         avatar = "🎓" if msg["role"] == "user" else "✨"
         with st.chat_message(msg["role"], avatar=avatar):
-            # Check if this message has associated PDF pages to render
             pdf_pages = msg.get("pdf_pages", [])
             
             if pdf_pages:
@@ -314,7 +198,7 @@ else:
             else:
                 st.markdown(msg["content"])
 
-    # Chat input processing
+    # Chat Input processing
     if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
         if current_chat["title"] == "New Chat":
             current_chat["title"] = prompt[:25]
@@ -402,8 +286,7 @@ INSTRUCTIONS:
                     page_numbers = []
                     log_interaction(st.session_state.current_chat_id, prompt, f"Error: {str(e)[:50]}")
 
-                # Save response along with referenced page numbers
-                top_page = page_numbers[:1] if page_numbers else [] # Renders top 1 relevant page image
+                top_page = page_numbers[:1] if page_numbers else []
                 
                 messages.append({
                     "role": "assistant", 
