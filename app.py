@@ -21,7 +21,7 @@ ADMIN_USERNAME = "aryan_admin"
 ADMIN_PASSWORD = "Aryan@2026"
 LOG_FILE = "global_seminar_logs.csv"
 
-# Ensure CSV log exists
+# Ensure global CSV log file exists
 if not os.path.exists(LOG_FILE):
     df = pd.DataFrame(columns=["timestamp", "session_id", "user_query", "response_status"])
     df.to_csv(LOG_FILE, index=False)
@@ -54,10 +54,10 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    # Using Llama 3.3 70B Versatile for high throughput and seminar capacity
+    # Model switched to 'llama3-70b-8192' - universal active default on Groq
     llm = ChatGroq(
         groq_api_key=groq_api_key,
-        model_name="llama-3.3-70b-versatile",
+        model_name="llama3-70b-8192",
         temperature=0.1,
         max_tokens=2500
     )
@@ -299,15 +299,13 @@ else:
         with st.chat_message("assistant", avatar="✨"):
             with st.spinner("Searching DC Dutta & retrieving details..."):
                 try:
-                    # 1. Combine recent user query context to ensure follow-ups stay on topic
+                    # Context combination for follow-up Hinglish queries
                     user_queries = [m["content"] for m in messages if m["role"] == "user"]
                     last_user_topic = user_queries[-2] if len(user_queries) >= 2 else ""
                     search_query = f"{last_user_topic} {prompt}".strip()
                     
-                    # Search vector DB with 5 relevant chunks
                     docs = vector_db.similarity_search(search_query, k=5)
                     
-                    # 2. Build lightweight history context
                     history_context = ""
                     for m in messages[:-1][-4:]:
                         role_str = "Student" if m["role"] == "user" else "Tutor"
@@ -365,13 +363,11 @@ INSTRUCTIONS:
                     response = llm.invoke(full_prompt)
                     response_text = response.content
 
-                    # Strip reasoning tags (<think>...</think>) if present
                     if "<think>" in response_text:
                         response_text = re.sub(
                             r"<think>.*?</think>", "", response_text, flags=re.DOTALL
                         ).strip()
 
-                    # Log success to shared backend file
                     log_interaction(st.session_state.current_chat_id, prompt, "Success")
 
                 except Exception as e:
