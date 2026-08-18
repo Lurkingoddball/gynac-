@@ -57,33 +57,39 @@ def init_rag():
     from groq import Groq
     client = Groq(api_key=groq_api_key)
     
-    # Priority list of active production chat models
-    priority_models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "llama3-70b-8192",
-        "mixtral-8x7b-32768"
+    # Retrieve all available models from your account
+    available_models = [m.id for m in client.models.list().data if getattr(m, 'active', True)]
+    
+    # Filter for standard Llama, Mixtral, or Gemma chat models
+    chat_candidates = [
+        m for m in available_models 
+        if any(p in m.lower() for p in ["llama", "mixtral", "gemma"]) 
+        and "whisper" not in m.lower() 
+        and "vision" not in m.lower()
     ]
     
-    available_models = [m.id for m in client.models.list().data]
-    selected_model = None
+    selected_llm = None
     
-    for pm in priority_models:
-        if pm in available_models:
-            selected_model = pm
+    # Verify model access with a test prompt
+    for model_id in chat_candidates:
+        try:
+            temp_llm = ChatGroq(
+                groq_api_key=groq_api_key,
+                model_name=model_id,
+                temperature=0.1,
+                max_tokens=1000
+            )
+            temp_llm.invoke("test")
+            selected_llm = temp_llm
             break
+        except Exception:
+            continue
             
-    if not selected_model:
-        selected_model = "llama-3.1-8b-instant"
+    if not selected_llm:
+        st.error("No compatible chat models accessible on this Groq API key.")
+        st.stop()
 
-    llm = ChatGroq(
-        groq_api_key=groq_api_key,
-        model_name=selected_model,
-        temperature=0.1,
-        max_tokens=1000  # Set conservatively to 1000 to prevent token limits on smaller models
-    )
-    
-    return vector_db, llm
+    return vector_db, selected_llm
 
 vector_db, llm = init_rag()
 
