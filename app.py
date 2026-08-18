@@ -46,8 +46,7 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# --- 4. INITIALIZE VECTOR DB & LLM ---
-# Using cache_resource to load heavy models once
+# --- 4. INITIALIZE VECTOR DB & LLM (WITH AUTOMATIC FALLBACK) ---
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -55,13 +54,39 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    # Active, highly stable model on Groq
-    llm = ChatGroq(
-        groq_api_key=groq_api_key,
-        model_name="llama-3.1-8b-instant",
-        temperature=0.1,
-        max_tokens=2500
-    )
+    
+    # Priority list of Groq models to try
+    candidate_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it"
+    ]
+    
+    llm = None
+    last_err = None
+    
+    for model_name in candidate_models:
+        try:
+            temp_llm = ChatGroq(
+                groq_api_key=groq_api_key,
+                model_name=model_name,
+                temperature=0.1,
+                max_tokens=2500
+            )
+            # Test invocation to verify model availability on this API key
+            temp_llm.invoke("ping")
+            llm = temp_llm
+            break
+        except Exception as e:
+            last_err = e
+            continue
+
+    if llm is None:
+        st.error(f"Failed to connect to any Groq model. Last error: {last_err}")
+        st.stop()
+
     return vector_db, llm
 
 vector_db, llm = init_rag()
