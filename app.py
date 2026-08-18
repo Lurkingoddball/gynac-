@@ -33,7 +33,6 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    # Active model on your Groq plan
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="qwen/qwen3.6-27b",
@@ -47,19 +46,16 @@ vector_db, llm = init_rag()
 # --- 5. COMPREHENSIVE CSS & SCROLL FIXES ---
 st.markdown("""
 <style>
-    /* 1. DISABLE PULL-TO-REFRESH ON MOBILE ENTIRELY */
     html, body, .stApp {
         overscroll-behavior-y: none !important;
         touch-action: pan-x pan-y !important;
     }
 
-    /* 2. KEEP HEADER TRANSPARENT SO SIDEBAR TOGGLE (>>) REMAINS VISIBLE */
     header[data-testid="stHeader"] {
         background: transparent !important;
         z-index: 99 !important;
     }
     
-    /* Ensure sidebar collapse/expand icon is always visible & touch-friendly */
     button[data-testid="stHeaderNavButton"], 
     button[data-testid="baseButton-header"] {
         display: block !important;
@@ -67,7 +63,6 @@ st.markdown("""
         opacity: 1 !important;
     }
 
-    /* Hide default Streamlit footer & action buttons without breaking top header */
     footer { display: none !important; }
     #MainMenu { display: none !important; }
     [data-testid="stStatusWidget"] { display: none !important; }
@@ -81,31 +76,27 @@ st.markdown("""
     #manage-app-button { display: none !important; }
     div[data-testid="stDecoration"] { display: none !important; }
 
-    /* 3. APP BACKGROUND */
     .stApp {
         background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
 
-    /* 4. SCROLLABLE MAIN CONTAINER (FIXES OVERFLOW & CUT-OFF CONTENT) */
     .main .block-container, [data-testid="stMainBlockContainer"] {
         max-width: 800px !important;
         width: 100% !important;
         margin: 0 auto !important;
         padding-top: 1rem !important;
-        padding-bottom: 140px !important; /* Prevents input bar from blocking answer text */
+        padding-bottom: 140px !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
     }
 
-    /* Chat message bubble containment */
     div[data-testid="stChatMessage"] {
         max-width: 100% !important;
         margin: 0 auto !important;
         word-break: break-word !important;
     }
 
-    /* 5. DYNAMIC TITLES */
     .main-title {
         text-align: center;
         font-size: clamp(1.6rem, 5vw, 2.5rem);
@@ -130,7 +121,6 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
-    /* 6. FLOATING INPUT BAR SAFEGUARDED FOR MOBILE DOCKS */
     .stChatInputContainer {
         border-radius: 28px !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
@@ -146,11 +136,10 @@ st.markdown("""
         z-index: 999 !important;
     }
 
-    /* 7. SIDEBAR OVERLAY FIX FOR SMALL SCREENS */
     section[data-testid="stSidebar"] {
         background-color: #f8f9fa;
         border-right: 1px solid #e9ecef;
-        z-index: 99999 !important; /* Keeps sidebar on top when opened on mobile */
+        z-index: 99999 !important;
     }
 
     .sidebar-header {
@@ -284,18 +273,25 @@ else:
         with st.chat_message("assistant", avatar="✨"):
             with st.spinner("Searching DC Dutta & retrieving details..."):
                 try:
-                    # Truncate history to only last 2 messages to save tokens
+                    # 1. Gather recent user queries to preserve topic context
+                    user_queries = [m["content"] for m in messages if m["role"] == "user"]
+                    last_user_topic = user_queries[-2] if len(user_queries) >= 2 else ""
+                    
+                    # Search vector DB with combined query context so follow-ups stay on topic
+                    search_query = f"{last_user_topic} {prompt}".strip()
+                    docs = vector_db.similarity_search(search_query, k=5)
+                    
+                    # 2. Build concise context history for LLM
                     history_context = ""
-                    for m in messages[:-1][-2:]:
+                    for m in messages[:-1][-4:]:
                         role_str = "Student" if m["role"] == "user" else "Tutor"
-                        history_context += f"{role_str}: {m['content'][:300]}\n"
+                        # Keep full user queries, truncate lengthy tutor responses
+                        content_str = m['content'] if m['role'] == 'user' else m['content'][:150] + "..."
+                        history_context += f"{role_str}: {content_str}\n"
                     
                     if not history_context:
                         history_context = "None"
 
-                    # Reduced k from 15 to 6 to fit within Groq token limits (8000 TPM)
-                    docs = vector_db.similarity_search(prompt, k=6)
-                    
                     context_blocks = []
                     page_numbers = set()
                     
@@ -314,8 +310,7 @@ else:
                         else:
                             p_str = "N/A"
                         
-                        # Limit individual document snippet length
-                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content[:1000]}")
+                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content[:800]}")
 
                     context_text = "\n\n".join(context_blocks)
                     
@@ -327,20 +322,25 @@ else:
 
                     full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing medical exam answers derived from DC Dutta's Textbook.
 
-CONTEXT:
+CONVERSATION HISTORY:
+{history_context}
+
+TEXTBOOK CONTEXT:
 {context_text}
 
 USER QUESTION:
 {prompt}
 
 INSTRUCTIONS:
-- Give a detailed, structured medical answer covering Etiology, Clinical Features, Diagnosis, and Management.
+- Answer the user's question directly in relation to the ongoing clinical topic in the conversation history.
+- Provide a detailed, structured medical answer (Etiology, Clinical Features, Diagnosis/Investigations, Management) as appropriate.
+- You understand Hinglish / Hindi inputs (e.g., "investigation batao" means "Explain the investigations"). Respond in clear English.
 - Strictly append `{citation_line}` at the end.
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
 
-                    # --- REMOVE REASONING / THINKING TAGS (<think>...</think>) ---
+                    # Remove reasoning/thinking tags (<think>...</think>)
                     if "<think>" in response_text:
                         response_text = re.sub(
                             r"<think>.*?</think>", "", response_text, flags=re.DOTALL
