@@ -6,3 +6,5 @@ sentence-transformers
 chromadb
 torch
 torchvision
+pdf2image
+pillow
