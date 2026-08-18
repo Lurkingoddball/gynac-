@@ -54,21 +54,34 @@ def init_rag():
         embedding_function=embeddings
     )
     
+    # Target reliable text models with standard token limits
+    target_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768"
+    ]
+    
+    selected_model = None
     from groq import Groq
     client = Groq(api_key=groq_api_key)
     
-    # Automatically pick the first available Llama model or fallback safely
     try:
-        models = [m.id for m in client.models.list().data]
-        selected_model = next((m for m in models if "llama" in m.lower()), models[0] if models else "llama-3.1-8b-instant")
+        available = [m.id for m in client.models.list().data]
+        for tm in target_models:
+            if tm in available:
+                selected_model = tm
+                break
     except Exception:
-        selected_model = "llama-3.1-8b-instant"
+        pass
+        
+    if not selected_model:
+        selected_model = "llama-3.3-70b-versatile"
 
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name=selected_model,
         temperature=0.1,
-        max_tokens=1000
+        max_tokens=500  # Set to 500 to satisfy the strict max token limit
     )
     
     return vector_db, llm
