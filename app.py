@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import streamlit as st
 from langchain_chroma import Chroma
@@ -32,7 +33,7 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    # Updated to active, fast, and accurate model on your Groq plan
+    # Active model on your Groq plan
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="qwen/qwen3.6-27b",
@@ -343,6 +344,12 @@ else:
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
+
+                    # --- REMOVE REASONING / THINKING TAGS (<think>...</think>) ---
+                    if "<think>" in response_text:
+                        response_text = re.sub(
+                            r"<think>.*?</think>", "", response_text, flags=re.DOTALL
+                        ).strip()
 
                 except Exception as e:
                     response_text = f"⚠️ Error generating response: {str(e)}"
