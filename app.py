@@ -45,7 +45,7 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# --- 4. MODEL INITIALIZATION (BULLETPROOF DYNAMIC SELECTOR) ---
+# --- 4. DYNAMIC MODEL DISCOVERY & INITIALIZATION ---
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -54,24 +54,26 @@ def init_rag():
         embedding_function=embeddings
     )
     
+    # Query Groq API directly for active models on your account
     from groq import Groq
     client = Groq(api_key=groq_api_key)
+    active_models = [m.id for m in client.models.list().data if getattr(m, 'active', True)]
     
-    # Query Groq directly for all live models available on YOUR key
-    try:
-        live_models = client.models.list().data
-        # Grab the first model ID returned by Groq's API
-        selected_model = live_models[0].id
-    except Exception as e:
-        st.error(f"Could not retrieve models from Groq API: {e}")
+    # Filter out whisper or audio models if present
+    text_models = [m for m in active_models if "whisper" not in m.lower()]
+    
+    if not text_models:
+        st.error("No active text models found on this Groq account.")
         st.stop()
 
-    # Initialize ChatGroq using the dynamically fetched model ID
+    # Pick the first available active model dynamically
+    selected_model = text_models[0]
+    
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name=selected_model,
         temperature=0.1,
-        max_tokens=500  # Safe cap to prevent 400 context errors
+        max_tokens=2500
     )
     
     return vector_db, llm
