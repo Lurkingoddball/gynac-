@@ -47,6 +47,7 @@ if not groq_api_key:
     st.stop()
 
 # --- 4. INITIALIZE VECTOR DB & LLM ---
+# Using cache_resource to load heavy models once
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -54,7 +55,7 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    # Active, non-decommissioned Groq model
+    # Active, highly stable model on Groq
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name="llama-3.1-8b-instant",
@@ -299,7 +300,6 @@ else:
         with st.chat_message("assistant", avatar="✨"):
             with st.spinner("Searching DC Dutta & retrieving details..."):
                 try:
-                    # Context combination for follow-up Hinglish queries
                     user_queries = [m["content"] for m in messages if m["role"] == "user"]
                     last_user_topic = user_queries[-2] if len(user_queries) >= 2 else ""
                     search_query = f"{last_user_topic} {prompt}".strip()
