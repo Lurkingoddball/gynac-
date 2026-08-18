@@ -80,7 +80,25 @@ def init_rag():
     return vector_db, llm
 
 vector_db, llm = init_rag()
+# =========================================================
+from pdf2image import convert_from_path
 
+@st.cache_data(show_spinner=False)
+def get_pdf_page_image(pdf_path, page_num):
+    """Converts a specific PDF page to an image for inline display."""
+    try:
+        # Convert 1-based page number to 0-based index
+        images = convert_from_path(
+            pdf_path, 
+            first_page=page_num, 
+            last_page=page_num
+        )
+        if images:
+            return images[0]
+    except Exception as e:
+        st.warning(f"Unable to render PDF page {page_num}: {e}")
+    return None
+# =========================================================
 # --- 5. COMPREHENSIVE CSS & UI STYLING ---
 st.markdown("""
 <style>
