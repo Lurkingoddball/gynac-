@@ -1,42 +1,22 @@
 import os
 import re
+import uuid
 import streamlit as st
+from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
 from langchain_groq import ChatGroq
-from pdf2image import convert_from_path
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="DC Dutta Gynaec-Obs Assistant",
-    page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Gynaecology and Obstetrics",
+    page_icon="✨",
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# --- 2. SESSION STATE INITIALIZATION ---
-if "chats" not in st.session_state:
-    st.session_state.chats = {
-        "chat_1": {
-            "title": "New Chat",
-            "messages": []
-        }
-    }
-if "current_chat_id" not in st.session_state:
-    st.session_state.current_chat_id = "chat_1"
-if "admin_logged_in" not in st.session_state:
-    st.session_state.admin_logged_in = False
-if "view_mode" not in st.session_state:
-    st.session_state.view_mode = "chat"
-if "interaction_logs" not in st.session_state:
-    st.session_state.interaction_logs = []
-
-def log_interaction(chat_id, query, status):
-    st.session_state.interaction_logs.append({
-        "chat_id": chat_id,
-        "query": query,
-        "status": status
-    })
+# --- 2. ADMIN CREDENTIALS ---
+ADMIN_USERNAME = "aryan_admin"
+ADMIN_PASSWORD = "Aryan@2026"
 
 # --- 3. RETRIEVE GROQ API KEY ---
 groq_api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
@@ -45,7 +25,7 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# --- 4. MODEL & VECTOR DB INITIALIZATION ---
+# --- 4. INITIALIZE VECTOR DB & LLM ---
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -53,153 +33,234 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
-    
-    from groq import Groq
-    client = Groq(api_key=groq_api_key)
-    active_models = [m.id for m in client.models.list().data if getattr(m, 'active', True)]
-    text_models = [m for m in active_models if "whisper" not in m.lower()]
-    
-    if not text_models:
-        st.error("No active text models found on this Groq account.")
-        st.stop()
-
-    selected_model = text_models[0]
-    
     llm = ChatGroq(
         groq_api_key=groq_api_key,
-        model_name=selected_model,
-        temperature=0.2,
-        max_tokens=4000
+        model_name="qwen/qwen3.6-27b",
+        temperature=0.1,
+        max_tokens=3000
     )
-    
     return vector_db, llm
 
 vector_db, llm = init_rag()
 
-@st.cache_data(show_spinner=False)
-def get_pdf_page_image(pdf_path, page_num):
-    try:
-        images = convert_from_path(pdf_path, first_page=page_num, last_page=page_num)
-        return images[0] if images else None
-    except Exception:
-        return None
-
-# --- 5. CUSTOM UI STYLING ---
+# --- 5. COMPREHENSIVE CSS & SCROLL FIXES ---
 st.markdown("""
 <style>
+    html, body, .stApp {
+        overscroll-behavior-y: none !important;
+        touch-action: pan-x pan-y !important;
+    }
+
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        z-index: 99 !important;
+    }
+    
+    button[data-testid="stHeaderNavButton"], 
+    button[data-testid="baseButton-header"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    footer { display: none !important; }
+    #MainMenu { display: none !important; }
+    [data-testid="stStatusWidget"] { display: none !important; }
+    .stAppBadge { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    div[class*="viewerBadge"] { display: none !important; }
+    button[title="View source on GitHub"] { display: none !important; }
+    .stActionButton { display: none !important; }
+    .stAppHostBadge { display: none !important; }
+    iframe[title="Streamlit App Badge"] { display: none !important; }
+    #manage-app-button { display: none !important; }
+    div[data-testid="stDecoration"] { display: none !important; }
+
     .stApp {
-        background-color: #FAFAFA;
+        background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
+        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
+
+    .main .block-container, [data-testid="stMainBlockContainer"] {
+        max-width: 800px !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+        padding-top: 1rem !important;
+        padding-bottom: 140px !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    div[data-testid="stChatMessage"] {
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        word-break: break-word !important;
+    }
+
     .main-title {
-        font-size: 2.5rem;
-        font-weight: 800;
-        color: #1E293B;
-        margin-bottom: 0.1rem;
-        letter-spacing: -0.5px;
-    }
-    .sub-credit {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #0284C7;
+        text-align: center;
+        font-size: clamp(1.6rem, 5vw, 2.5rem);
+        font-weight: 500;
+        color: #1f1f1f;
+        margin-top: 1vh;
         margin-bottom: 0.2rem;
     }
-    .source-credit {
-        font-size: 0.95rem;
-        color: #64748B;
-        margin-bottom: 2rem;
-        font-style: italic;
+    
+    .sub-credit {
+        text-align: center;
+        font-size: clamp(0.85rem, 3vw, 1rem);
+        font-weight: 500;
+        color: #0b57d0;
+        margin-bottom: 0.2rem;
     }
+    
+    .source-credit {
+        text-align: center;
+        font-size: clamp(0.75rem, 2.5vw, 0.9rem);
+        color: #5f6368;
+        margin-bottom: 1.5rem;
+    }
+
+    .stChatInputContainer {
+        border-radius: 28px !important;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+        border: 1px solid #e0e2e5 !important;
+        background-color: #ffffff !important;
+        padding: 4px !important;
+        width: 92% !important;
+        max-width: 760px !important;
+        position: fixed !important;
+        bottom: 15px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 999 !important;
+    }
+
     section[data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E2E8F0;
+        background-color: #f8f9fa;
+        border-right: 1px solid #e9ecef;
+        z-index: 99999 !important;
+    }
+
+    .sidebar-header {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #5f6368;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 6. SIDEBAR NAVIGATION ---
+# --- 6. SESSION STATE INITIALIZATION ---
+if "chats" not in st.session_state:
+    st.session_state.chats = {}
+
+if "current_chat_id" not in st.session_state:
+    new_id = str(uuid.uuid4())
+    st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
+    st.session_state.current_chat_id = new_id
+
+if "admin_logged_in" not in st.session_state:
+    st.session_state.admin_logged_in = False
+
+if "view_mode" not in st.session_state:
+    st.session_state.view_mode = "chat"
+
+if st.session_state.current_chat_id not in st.session_state.chats:
+    new_id = str(uuid.uuid4())
+    st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
+    st.session_state.current_chat_id = new_id
+
+# --- 7. SIDEBAR (NAVIGATION & ADMIN) ---
 with st.sidebar:
-    st.title("🎓 DC Dutta Assistant")
-    
-    if st.button("➕ New Chat", use_container_width=True, type="primary"):
-        new_id = f"chat_{len(st.session_state.chats) + 1}"
+    if st.button("➕ New chat", use_container_width=True):
+        new_id = str(uuid.uuid4())
         st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
         st.session_state.current_chat_id = new_id
         st.session_state.view_mode = "chat"
         st.rerun()
 
-    st.markdown("---")
-    st.caption("Recent Conversations")
-    
-    for c_id, c_data in list(st.session_state.chats.items()):
-        btn_label = f"💬 {c_data['title']}"
-        if st.button(btn_label, key=f"nav_{c_id}", use_container_width=True):
-            st.session_state.current_chat_id = c_id
+    st.markdown('<div class="sidebar-header">Recent Chats</div>', unsafe_allow_html=True)
+
+    for cid, chat_data in list(st.session_state.chats.items())[::-1]:
+        title = chat_data["title"][:20] + "..." if len(chat_data["title"]) > 20 else chat_data["title"]
+        is_active = (cid == st.session_state.current_chat_id and st.session_state.view_mode == "chat")
+        btn_label = f"🗣️ {title}" if is_active else f"💬 {title}"
+        
+        if st.button(btn_label, key=f"chat_nav_{cid}", use_container_width=True):
+            st.session_state.current_chat_id = cid
             st.session_state.view_mode = "chat"
             st.rerun()
 
-    st.markdown("---")
+    st.divider()
+
     with st.expander("🔒 Admin Panel"):
         if not st.session_state.admin_logged_in:
-            admin_pass = st.text_input("Password", type="password")
-            if st.button("Login", use_container_width=True):
-                if admin_pass == "admin123":
+            admin_user = st.text_input("Username", key="admin_user_input")
+            admin_pass = st.text_input("Password", type="password", key="admin_pass_input")
+            
+            if st.button("Login as Admin", use_container_width=True):
+                if admin_user == ADMIN_USERNAME and admin_pass == ADMIN_PASSWORD:
                     st.session_state.admin_logged_in = True
-                    st.success("Logged in!")
+                    st.success("Authenticated!")
                     st.rerun()
                 else:
-                    st.error("Incorrect password")
+                    st.error("Invalid Credentials")
         else:
-            st.write("Logged in as Admin")
-            if st.button("View Analytics", use_container_width=True):
+            st.write("🟢 **Admin Authenticated**")
+            
+            col_a, col_b = st.columns(2)
+            if col_a.button("📊 Analytics", use_container_width=True):
                 st.session_state.view_mode = "analytics"
                 st.rerun()
-            if st.button("Logout", use_container_width=True):
+            if col_b.button("💬 Chat Mode", use_container_width=True):
+                st.session_state.view_mode = "chat"
+                st.rerun()
+                
+            if st.button("Logout Admin", use_container_width=True):
                 st.session_state.admin_logged_in = False
                 st.session_state.view_mode = "chat"
                 st.rerun()
 
-# --- 7. ADMIN DASHBOARD ---
+# --- 8. MAIN VIEW ROUTING ---
 if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics":
-    st.title("📊 Admin Analytics Dashboard")
-    st.write(f"Total Logged Interactions: {len(st.session_state.interaction_logs)}")
-    st.dataframe(st.session_state.interaction_logs, use_container_width=True)
-    if st.button("Back to Chat"):
-        st.session_state.view_mode = "chat"
-        st.rerun()
+    st.title("⚙️ Backend Admin Analytics")
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Active Sessions", len(st.session_state.chats))
+    
+    total_q = sum(len([m for m in c["messages"] if m["role"] == "user"]) for c in st.session_state.chats.values())
+    col2.metric("Total User Queries", total_q)
+    
+    total_messages = sum(len(c["messages"]) for c in st.session_state.chats.values())
+    col3.metric("Total Messages Exchanged", total_messages)
+    
+    st.divider()
+    st.subheader("Session Log Transcripts")
+    
+    for cid, data in st.session_state.chats.items():
+        with st.expander(f"Session: {data['title']} (ID: {cid[:8]}...)"):
+            st.write(f"**Full Title:** {data['title']}")
+            st.write(f"**Total Messages:** {len(data['messages'])}")
+            st.json(data["messages"])
 
-# --- 8. MAIN CHAT VIEW ---
 else:
     current_chat = st.session_state.chats[st.session_state.current_chat_id]
     messages = current_chat["messages"]
 
     if len(messages) == 0:
-        st.markdown('<div class="main-title">Gynaecology & Obstetrics</div>', unsafe_allow_html=True)
+        st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
         st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
-        st.markdown('<div class="source-credit">Source Citation: DC Dutta Textbook</div>', unsafe_allow_html=True)
+        st.markdown('<div class="source-credit">Source: DC Dutta</div>', unsafe_allow_html=True)
 
-    # Render previous messages
     for msg in messages:
         avatar = "🎓" if msg["role"] == "user" else "✨"
         with st.chat_message(msg["role"], avatar=avatar):
-            pdf_pages = msg.get("pdf_pages", [])
-            
-            if pdf_pages and msg["role"] == "assistant":
-                col_text, col_pdf = st.columns([1.2, 0.8])
-                
-                with col_text:
-                    st.markdown(msg["content"])
-                    
-                with col_pdf:
-                    page_num = pdf_pages[0]
-                    img = get_pdf_page_image("./dc_dutta.pdf", page_num)
-                    if img:
-                        st.image(img, caption=f"DC Dutta — Page {page_num}", use_container_width=True)
-                    else:
-                        st.info(f"📄 Reference Page: DC Dutta (Page {page_num})")
-            else:
-                st.markdown(msg["content"])
+            st.markdown(msg["content"])
 
-    # Chat Input processing
     if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
         if current_chat["title"] == "New Chat":
             current_chat["title"] = prompt[:25]
@@ -210,13 +271,21 @@ else:
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="✨"):
-            with st.spinner("Searching DC Dutta & generating clinical breakdown..."):
+            with st.spinner("Searching DC Dutta & retrieving details..."):
                 try:
-                    docs = vector_db.similarity_search(prompt, k=5)
+                    # 1. Gather recent user queries to preserve topic context
+                    user_queries = [m["content"] for m in messages if m["role"] == "user"]
+                    last_user_topic = user_queries[-2] if len(user_queries) >= 2 else ""
                     
+                    # Search vector DB with combined query context so follow-ups stay on topic
+                    search_query = f"{last_user_topic} {prompt}".strip()
+                    docs = vector_db.similarity_search(search_query, k=5)
+                    
+                    # 2. Build concise context history for LLM
                     history_context = ""
                     for m in messages[:-1][-4:]:
                         role_str = "Student" if m["role"] == "user" else "Tutor"
+                        # Keep full user queries, truncate lengthy tutor responses
                         content_str = m['content'] if m['role'] == 'user' else m['content'][:150] + "..."
                         history_context += f"{role_str}: {content_str}\n"
                     
@@ -224,39 +293,34 @@ else:
                         history_context = "None"
 
                     context_blocks = []
-                    page_numbers = []
+                    page_numbers = set()
                     
                     for doc in docs:
                         meta = doc.metadata or {}
-                        # Dynamic page key search
-                        page_val = None
-                        for key in ["page", "page_number", "source_page", "Page"]:
-                            if key in meta and meta[key] is not None:
-                                page_val = meta[key]
-                                break
+                        page_val = meta.get("page") or meta.get("page_number") or meta.get("source_page")
                         
-                        if page_val is not None:
+                        if page_val is not None and str(page_val).strip() != "":
                             try:
                                 p_int = int(page_val) + 1
-                                if p_int not in page_numbers:
-                                    page_numbers.append(p_int)
+                                page_numbers.add(str(p_int))
                                 p_str = str(p_int)
                             except ValueError:
+                                page_numbers.add(str(page_val))
                                 p_str = str(page_val)
                         else:
                             p_str = "N/A"
                         
-                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content}")
+                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content[:800]}")
 
                     context_text = "\n\n".join(context_blocks)
                     
                     if page_numbers:
-                        pages_ref = ", ".join(map(str, sorted(page_numbers)))
+                        pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
                         citation_line = f"📌 **Source Citation**: DC Dutta Obstetrics & Gynecology (Page(s): {pages_ref})"
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing highly detailed, comprehensive medical answers derived strictly from DC Dutta's Textbook.
+                    full_prompt = f"""You are a senior Professor of Obstetrics and Gynecology providing medical exam answers derived from DC Dutta's Textbook.
 
 CONVERSATION HISTORY:
 {history_context}
@@ -268,31 +332,23 @@ USER QUESTION:
 {prompt}
 
 INSTRUCTIONS:
-- Do NOT use HTML tables, <br> tags, or brief summaries.
-- Provide comprehensive, long-form clinical explanations with clear Markdown headings (e.g., Definition, Etiology, Physiological Changes, Management).
-- Use detailed bullet points and write full paragraphs for each clinical section.
+- Answer the user's question directly in relation to the ongoing clinical topic in the conversation history.
+- Provide a detailed, structured medical answer (Etiology, Clinical Features, Diagnosis/Investigations, Management) as appropriate.
+- You understand Hinglish / Hindi inputs (e.g., "investigation batao" means "Explain the investigations"). Respond in clear English.
 - Strictly append `{citation_line}` at the end.
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
 
+                    # Remove reasoning/thinking tags (<think>...</think>)
                     if "<think>" in response_text:
                         response_text = re.sub(
                             r"<think>.*?</think>", "", response_text, flags=re.DOTALL
                         ).strip()
 
-                    log_interaction(st.session_state.current_chat_id, prompt, "Success")
-
                 except Exception as e:
                     response_text = f"⚠️ Error generating response: {str(e)}"
-                    page_numbers = []
-                    log_interaction(st.session_state.current_chat_id, prompt, f"Error: {str(e)[:50]}")
 
-                top_page = page_numbers[:1] if page_numbers else []
-
-                messages.append({
-                    "role": "assistant",
-                    "content": response_text,
-                    "pdf_pages": top_page
-                })
+                st.markdown(response_text)
+                messages.append({"role": "assistant", "content": response_text})
                 st.rerun()
