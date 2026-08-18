@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="Gynaecology and Obstetrics",
     page_icon="✨",
     layout="centered",
-    initial_sidebar_state="collapsed"  # Starts collapsed on mobile with visible toggle button
+    initial_sidebar_state="collapsed"
 )
 
 # --- 2. ADMIN CREDENTIALS ---
@@ -32,9 +32,10 @@ def init_rag():
         persist_directory="./dutta_vector_db",
         embedding_function=embeddings
     )
+    # Fixed model_name to use current valid Groq API identifier
     llm = ChatGroq(
         groq_api_key=groq_api_key,
-        model_name="llama-3.3-70b-versatile",
+        model_name="meta-llama/llama-3.3-70b-versatile",
         temperature=0.1,
         max_tokens=4096
     )
@@ -42,22 +43,21 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. COMPREHENSIVE CSS & SCROLL FIXES ---
+# --- 5. CSS SCROLL, SIDEBAR & UI FIXES ---
 st.markdown("""
 <style>
-    /* 1. DISABLE PULL-TO-REFRESH ON MOBILE ENTIRELY */
+    /* 1. PREVENT MOBILE PULL-TO-REFRESH REBOOTS */
     html, body, .stApp {
         overscroll-behavior-y: none !important;
         touch-action: pan-x pan-y !important;
     }
 
-    /* 2. KEEP HEADER TRANSPARENT SO SIDEBAR TOGGLE (>>) REMAINS VISIBLE */
+    /* 2. TRANSPARENT HEADER TO KEEP MOBILE SIDEBAR TOGGLE VISIBLE */
     header[data-testid="stHeader"] {
         background: transparent !important;
         z-index: 99 !important;
     }
     
-    /* Ensure sidebar collapse/expand icon is always visible & touch-friendly */
     button[data-testid="stHeaderNavButton"], 
     button[data-testid="baseButton-header"] {
         display: block !important;
@@ -65,7 +65,7 @@ st.markdown("""
         opacity: 1 !important;
     }
 
-    /* Hide default Streamlit footer & action buttons without breaking top header */
+    /* HIDE FOOTER & STREAMLIT BADGES */
     footer { display: none !important; }
     #MainMenu { display: none !important; }
     [data-testid="stStatusWidget"] { display: none !important; }
@@ -79,24 +79,23 @@ st.markdown("""
     #manage-app-button { display: none !important; }
     div[data-testid="stDecoration"] { display: none !important; }
 
-    /* 3. APP BACKGROUND */
+    /* 3. BACKGROUND */
     .stApp {
         background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     }
 
-    /* 4. SCROLLABLE MAIN CONTAINER (FIXES OVERFLOW & CUT-OFF CONTENT) */
+    /* 4. MAIN CONTAINER LAYOUT & SCROLL FIX */
     .main .block-container, [data-testid="stMainBlockContainer"] {
         max-width: 800px !important;
         width: 100% !important;
         margin: 0 auto !important;
         padding-top: 1rem !important;
-        padding-bottom: 140px !important; /* Prevents input bar from blocking answer text */
+        padding-bottom: 140px !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
     }
 
-    /* Chat message bubble containment */
     div[data-testid="stChatMessage"] {
         max-width: 100% !important;
         margin: 0 auto !important;
@@ -128,7 +127,7 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
-    /* 6. FLOATING INPUT BAR SAFEGUARDED FOR MOBILE DOCKS */
+    /* 6. FLOATING CHAT INPUT BAR */
     .stChatInputContainer {
         border-radius: 28px !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
@@ -144,11 +143,11 @@ st.markdown("""
         z-index: 999 !important;
     }
 
-    /* 7. SIDEBAR OVERLAY FIX FOR SMALL SCREENS */
+    /* 7. SIDEBAR OVERLAY FIX FOR MOBILE */
     section[data-testid="stSidebar"] {
         background-color: #f8f9fa;
         border-right: 1px solid #e9ecef;
-        z-index: 99999 !important; /* Keeps sidebar on top when opened on mobile */
+        z-index: 99999 !important;
     }
 
     .sidebar-header {
