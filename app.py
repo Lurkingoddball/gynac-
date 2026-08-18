@@ -39,14 +39,14 @@ def log_interaction(session_id, user_query, status):
     except Exception:
         pass
 
-# --- 3. RETRIEVE GROQ API KEY ---
+# --- 3. RETRIEVE GROQ API KEY & CLIENT ---
 groq_api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
 
 if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# --- 4. INITIALIZE VECTOR DB & LLM (WITH AUTOMATIC FALLBACK) ---
+# --- 4. DYNAMIC MODEL DISCOVERY & INITIALIZATION ---
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -55,38 +55,28 @@ def init_rag():
         embedding_function=embeddings
     )
     
-    # Priority list of Groq models to try
-    candidate_models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b-instant",
-        "mixtral-8x7b-32768",
-        "gemma2-9b-it"
-    ]
+    # Query Groq API directly for active models on your account
+    from groq import Groq
+    client = Groq(api_key=groq_api_key)
+    active_models = [m.id for m in client.models.list().data if getattr(m, 'active', True)]
     
-    llm = None
-    last_err = None
+    # Filter out whisper or audio models if present
+    text_models = [m for m in active_models if "whisper" not in m.lower()]
     
-    for model_name in candidate_models:
-        try:
-            temp_llm = ChatGroq(
-                groq_api_key=groq_api_key,
-                model_name=model_name,
-                temperature=0.1,
-                max_tokens=2500
-            )
-            # Test invocation to verify model availability on this API key
-            temp_llm.invoke("ping")
-            llm = temp_llm
-            break
-        except Exception as e:
-            last_err = e
-            continue
-
-    if llm is None:
-        st.error(f"Failed to connect to any Groq model. Last error: {last_err}")
+    if not text_models:
+        st.error("No active text models found on this Groq account.")
         st.stop()
 
+    # Pick the first available active model dynamically
+    selected_model = text_models[0]
+    
+    llm = ChatGroq(
+        groq_api_key=groq_api_key,
+        model_name=selected_model,
+        temperature=0.1,
+        max_tokens=2500
+    )
+    
     return vector_db, llm
 
 vector_db, llm = init_rag()
