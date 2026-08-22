@@ -43,19 +43,34 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. COMPREHENSIVE CSS, TABLE RESPONSIVENESS & SCROLL FIXES ---
+# --- 5. CUSTOM CSS (MATCHING EXPLICIT DESIGN THEME) ---
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Rubik+Glitch&family=Rubik+Wet+Paint&family=Montserrat:wght@400;500;700&display=swap');
+
+    /* Global Background & Typography */
     html, body, .stApp {
         overscroll-behavior-y: none !important;
         touch-action: pan-x pan-y !important;
+        background-color: #f4f1ea !important; /* Soft warm cream background */
+        color: #111111 !important;
+        font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
 
+    /* Hide Streamlit Default UI Elements */
     header[data-testid="stHeader"] {
         background: transparent !important;
         z-index: 99 !important;
     }
     
+    footer, #MainMenu, [data-testid="stStatusWidget"], .stAppBadge, 
+    [data-testid="stToolbar"], div[class*="viewerBadge"], 
+    button[title="View source on GitHub"], .stActionButton, 
+    .stAppHostBadge, iframe[title="Streamlit App Badge"], 
+    #manage-app-button, div[data-testid="stDecoration"] {
+        display: none !important;
+    }
+
     button[data-testid="stHeaderNavButton"], 
     button[data-testid="baseButton-header"] {
         display: block !important;
@@ -63,119 +78,118 @@ st.markdown("""
         opacity: 1 !important;
     }
 
-    footer { display: none !important; }
-    #MainMenu { display: none !important; }
-    [data-testid="stStatusWidget"] { display: none !important; }
-    .stAppBadge { display: none !important; }
-    [data-testid="stToolbar"] { display: none !important; }
-    div[class*="viewerBadge"] { display: none !important; }
-    button[title="View source on GitHub"] { display: none !important; }
-    .stActionButton { display: none !important; }
-    .stAppHostBadge { display: none !important; }
-    iframe[title="Streamlit App Badge"] { display: none !important; }
-    #manage-app-button { display: none !important; }
-    div[data-testid="stDecoration"] { display: none !important; }
-
-    .stApp {
-        background: radial-gradient(circle at center, #edf4ff 0%, #ffffff 75%);
-        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-    }
-
+    /* Main Container Padding */
     .main .block-container, [data-testid="stMainBlockContainer"] {
-        max-width: 800px !important;
+        max-width: 820px !important;
         width: 100% !important;
         margin: 0 auto !important;
-        padding-top: 1rem !important;
+        padding-top: 3rem !important;
         padding-bottom: 140px !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
+        padding-left: 1.2rem !important;
+        padding-right: 1.2rem !important;
     }
 
+    /* Bold Display Header Typography */
+    .bold-title {
+        text-align: center;
+        font-size: clamp(2rem, 6vw, 3.2rem);
+        font-weight: 900;
+        letter-spacing: 1px;
+        color: #000000;
+        text-transform: uppercase;
+        margin-top: 2vh;
+        margin-bottom: 1.2rem;
+        line-height: 1.1;
+    }
+    
+    .sub-credit {
+        text-align: center;
+        font-size: clamp(1rem, 3.5vw, 1.25rem);
+        font-weight: 500;
+        color: #1a1a1a;
+        margin-bottom: 0.4rem;
+    }
+    
+    .source-credit {
+        text-align: center;
+        font-size: clamp(0.9rem, 3vw, 1.05rem);
+        font-style: italic;
+        color: #333333;
+        margin-bottom: 2.5rem;
+    }
+
+    /* Styled Chat Bubble Cards */
     div[data-testid="stChatMessage"] {
-        max-width: 100% !important;
-        margin: 0 auto !important;
-        word-break: break-word !important;
+        background-color: #ffffff !important;
+        border: 2px solid #000000 !important;
+        border-radius: 20px !important;
+        padding: 18px 22px !important;
+        margin-bottom: 16px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
     }
 
-    /* --- MOBILE TABLE LAYOUT FIX --- */
+    /* Custom Input Bar Styling */
+    .stChatInputContainer {
+        border-radius: 35px !important;
+        border: 2px solid #000000 !important;
+        background-color: #ffffff !important;
+        padding: 6px 12px !important;
+        width: 90% !important;
+        max-width: 800px !important;
+        position: fixed !important;
+        bottom: 25px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 999 !important;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06) !important;
+    }
+
+    .stChatInputContainer textarea {
+        font-size: 1.05rem !important;
+        color: #111111 !important;
+    }
+
+    /* Mobile Table Layout Fixes */
     div[data-testid="stChatMessage"] table {
         display: block !important;
         overflow-x: auto !important;
         white-space: normal !important;
         width: 100% !important;
         border-collapse: collapse !important;
-        margin-top: 10px !important;
-        margin-bottom: 10px !important;
+        margin-top: 12px !important;
+        margin-bottom: 12px !important;
     }
 
     div[data-testid="stChatMessage"] th {
         min-width: 120px !important;
-        background-color: #f1f5f9 !important;
-        color: #0f172a !important;
-        font-weight: 600 !important;
-        padding: 8px 12px !important;
+        background-color: #e8e4dc !important;
+        color: #000000 !important;
+        font-weight: 700 !important;
+        padding: 10px 14px !important;
         text-align: left !important;
-        word-break: normal !important;
+        border: 1px solid #111111 !important;
     }
 
     div[data-testid="stChatMessage"] td {
         min-width: 180px !important;
-        padding: 8px 12px !important;
-        word-break: break-word !important;
+        padding: 10px 14px !important;
+        border: 1px solid #cbd5e1 !important;
         vertical-align: top !important;
     }
 
-    .main-title {
-        text-align: center;
-        font-size: clamp(1.6rem, 5vw, 2.5rem);
-        font-weight: 500;
-        color: #1f1f1f;
-        margin-top: 1vh;
-        margin-bottom: 0.2rem;
-    }
-    
-    .sub-credit {
-        text-align: center;
-        font-size: clamp(0.85rem, 3vw, 1rem);
-        font-weight: 500;
-        color: #0b57d0;
-        margin-bottom: 0.2rem;
-    }
-    
-    .source-credit {
-        text-align: center;
-        font-size: clamp(0.75rem, 2.5vw, 0.9rem);
-        color: #5f6368;
-        margin-bottom: 1.5rem;
-    }
-
-    .stChatInputContainer {
-        border-radius: 28px !important;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
-        border: 1px solid #e0e2e5 !important;
-        background-color: #ffffff !important;
-        padding: 4px !important;
-        width: 92% !important;
-        max-width: 760px !important;
-        position: fixed !important;
-        bottom: 15px !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        z-index: 999 !important;
-    }
-
+    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
-        background-color: #f8f9fa;
-        border-right: 1px solid #e9ecef;
+        background-color: #eae6dd !important;
+        border-right: 2px solid #000000 !important;
         z-index: 99999 !important;
     }
 
     .sidebar-header {
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: #5f6368;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #444444;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.8px;
         margin-top: 1rem;
         margin-bottom: 0.5rem;
     }
@@ -280,9 +294,9 @@ else:
     messages = current_chat["messages"]
 
     if len(messages) == 0:
-        st.markdown('<div class="main-title">Gynaecology and Obstetrics</div>', unsafe_allow_html=True)
+        st.markdown('<div class="bold-title">GYNAECOLOGY AND OBSTETRICS</div>', unsafe_allow_html=True)
         st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
-        st.markdown('<div class="source-credit">Source: DC Dutta</div>', unsafe_allow_html=True)
+        st.markdown('<div class="source-credit">Source : DC Dutta</div>', unsafe_allow_html=True)
 
     for msg in messages:
         avatar = "🎓" if msg["role"] == "user" else "✨"
@@ -344,7 +358,6 @@ else:
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-# NEW UPDATED CODE
                     full_prompt = f"""You are a senior clinical professor and medical expert explaining concepts derived from DC Dutta's Textbook of Obstetrics & Gynecology.
 
 CONVERSATION HISTORY:
