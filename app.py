@@ -43,7 +43,7 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. COMPREHENSIVE CSS & SCROLL FIXES ---
+# --- 5. COMPREHENSIVE CSS, TABLE RESPONSIVENESS & SCROLL FIXES ---
 st.markdown("""
 <style>
     html, body, .stApp {
@@ -95,6 +95,34 @@ st.markdown("""
         max-width: 100% !important;
         margin: 0 auto !important;
         word-break: break-word !important;
+    }
+
+    /* --- MOBILE TABLE LAYOUT FIX --- */
+    div[data-testid="stChatMessage"] table {
+        display: block !important;
+        overflow-x: auto !important;
+        white-space: normal !important;
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    div[data-testid="stChatMessage"] th {
+        min-width: 120px !important;
+        background-color: #f1f5f9 !important;
+        color: #0f172a !important;
+        font-weight: 600 !important;
+        padding: 8px 12px !important;
+        text-align: left !important;
+        word-break: normal !important;
+    }
+
+    div[data-testid="stChatMessage"] td {
+        min-width: 180px !important;
+        padding: 8px 12px !important;
+        word-break: break-word !important;
+        vertical-align: top !important;
     }
 
     .main-title {
@@ -273,19 +301,15 @@ else:
         with st.chat_message("assistant", avatar="✨"):
             with st.spinner("Searching DC Dutta & retrieving details..."):
                 try:
-                    # 1. Gather recent user queries to preserve topic context
                     user_queries = [m["content"] for m in messages if m["role"] == "user"]
                     last_user_topic = user_queries[-2] if len(user_queries) >= 2 else ""
                     
-                    # Search vector DB with combined query context so follow-ups stay on topic
                     search_query = f"{last_user_topic} {prompt}".strip()
                     docs = vector_db.similarity_search(search_query, k=5)
                     
-                    # 2. Build concise context history for LLM
                     history_context = ""
                     for m in messages[:-1][-4:]:
                         role_str = "Student" if m["role"] == "user" else "Tutor"
-                        # Keep full user queries, truncate lengthy tutor responses
                         content_str = m['content'] if m['role'] == 'user' else m['content'][:150] + "..."
                         history_context += f"{role_str}: {content_str}\n"
                     
@@ -340,7 +364,6 @@ INSTRUCTIONS:
                     response = llm.invoke(full_prompt)
                     response_text = response.content
 
-                    # Remove reasoning/thinking tags (<think>...</think>)
                     if "<think>" in response_text:
                         response_text = re.sub(
                             r"<think>.*?</think>", "", response_text, flags=re.DOTALL
