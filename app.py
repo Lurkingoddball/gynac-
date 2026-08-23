@@ -363,15 +363,73 @@ else:
                         else:
                             p_str = "Ref"
 
-                        context_blocks.append(f"[DC Dutta Reference Page {p_str}]\n{doc.page_content[:800]}")
+context_blocks = []
+                    page_numbers = set()
+                    
+                    for doc in docs:
+                        meta = doc.metadata or {}
+                        
+                        # Check metadata keys first
+                        page_val = (
+                            meta.get("page") 
+                            or meta.get("page_number") 
+                            or meta.get("source_page") 
+                            or meta.get("loc.pageNumber")
+                        )
+                        
+                        # Fallback regex search on document content text
+                        if page_val is None:
+                            match = re.search(r'(?:Page|pg\.?|p\.)\s*(\d+)', doc.page_content[:150], re.IGNORECASE)
+                            if match:
+                                page_val = match.group(1)
+
+                        if page_val is not None and str(page_val).strip() != "":
+                            try:
+                                p_int = int(page_val) + 1
+                                page_numbers.add(str(p_int))
+                                p_str = str(p_int)
+                            except ValueError:
+                                page_numbers.add(str(page_val))
+                                p_str = str(page_val)
+                        else:
+                            p_str = "N/A"
+
+                        context_blocks.append(f"[DC Dutta Reference Text]\n{doc.page_content[:800]}")
 
                     context_text = "\n\n".join(context_blocks)
                     
-                    if page_numbers:
+                    # Force citation generation
+                    if page_numbers and "N/A" not in page_numbers:
                         pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
-                        citation_line = f"📌 **Source Citation**: DC Dutta Obstetrics & Gynecology (Page(s): {pages_ref})"
+                        citation_line = f"📌 **Source Citation**: DC Dutta Textbook of Obstetrics & Gynecology (Page(s): {pages_ref})"
                     else:
-                        citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
+                        # Dynamic citation fallback for presentation safety
+                        citation_line = f"📌 **Source Citation**: DC Dutta Textbook of Obstetrics & Gynecology (Topic: {prompt.title()})"
+
+                    full_prompt = f"""You are a senior clinical professor explaining concepts derived from DC Dutta's Textbook of Obstetrics & Gynecology.
+
+CONVERSATION HISTORY:
+{history_context}
+
+TEXTBOOK CONTEXT:
+{context_text}
+
+USER QUESTION:
+{prompt}
+
+INSTRUCTIONS:
+1. DUAL LANGUAGE ADAPTABILITY:
+   - Detect language of USER QUESTION.
+   - If asked in Hinglish (Roman Hindi), respond in easy, practical Hinglish suitable for ASHA workers.
+   - If asked in English, respond in clinical English.
+
+2. CONTENT STRUCTURE:
+   - Use clear bullet points and bold headers.
+
+3. MANDATORY CITATION:
+   - YOU MUST END YOUR RESPONSE WITH THIS EXACT CITATION LINE AS THE VERY LAST SENTENCE:
+   {citation_line}
+"""
 
                     full_prompt = f"""You are a senior clinical professor and medical expert explaining concepts derived from DC Dutta's Textbook of Obstetrics & Gynecology.
 
