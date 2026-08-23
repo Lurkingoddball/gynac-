@@ -43,21 +43,19 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. CUSTOM CSS (MATCHING EXPLICIT DESIGN THEME) ---
+# --- 5. CUSTOM CSS ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Rubik+Glitch&family=Rubik+Wet+Paint&family=Montserrat:wght@400;500;700&display=swap');
 
-    /* Global Background & Typography */
     html, body, .stApp {
         overscroll-behavior-y: none !important;
         touch-action: pan-x pan-y !important;
-        background-color: #f4f1ea !important; /* Soft warm cream background */
+        background-color: #f4f1ea !important;
         color: #111111 !important;
         font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
 
-    /* Hide Streamlit Default UI Elements */
     header[data-testid="stHeader"] {
         background: transparent !important;
         z-index: 99 !important;
@@ -78,7 +76,6 @@ st.markdown("""
         opacity: 1 !important;
     }
 
-    /* Main Container Padding */
     .main .block-container, [data-testid="stMainBlockContainer"] {
         max-width: 820px !important;
         width: 100% !important;
@@ -89,7 +86,6 @@ st.markdown("""
         padding-right: 1.2rem !important;
     }
 
-    /* Bold Display Header Typography */
     .bold-title {
         text-align: center;
         font-size: clamp(2rem, 6vw, 3.2rem);
@@ -118,7 +114,6 @@ st.markdown("""
         margin-bottom: 2.5rem;
     }
 
-    /* Styled Chat Bubble Cards */
     div[data-testid="stChatMessage"] {
         background-color: #ffffff !important;
         border: 2px solid #000000 !important;
@@ -128,7 +123,6 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
     }
 
-    /* Custom Input Bar Styling */
     .stChatInputContainer {
         border-radius: 35px !important;
         border: 2px solid #000000 !important;
@@ -149,7 +143,6 @@ st.markdown("""
         color: #111111 !important;
     }
 
-    /* Mobile Table Layout Fixes */
     div[data-testid="stChatMessage"] table {
         display: block !important;
         overflow-x: auto !important;
@@ -177,7 +170,6 @@ st.markdown("""
         vertical-align: top !important;
     }
 
-    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #eae6dd !important;
         border-right: 2px solid #000000 !important;
@@ -267,7 +259,43 @@ with st.sidebar:
                 st.session_state.view_mode = "chat"
                 st.rerun()
 
-if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
+# --- 8. MAIN VIEW ROUTING ---
+if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics":
+    st.title("⚙️ Backend Admin Analytics")
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Active Sessions", len(st.session_state.chats))
+    
+    total_q = sum(len([m for m in c["messages"] if m["role"] == "user"]) for c in st.session_state.chats.values())
+    col2.metric("Total User Queries", total_q)
+    
+    total_messages = sum(len(c["messages"]) for c in st.session_state.chats.values())
+    col3.metric("Total Messages Exchanged", total_messages)
+    
+    st.divider()
+    st.subheader("Session Log Transcripts")
+    
+    for cid, data in st.session_state.chats.items():
+        with st.expander(f"Session: {data['title']} (ID: {cid[:8]}...)"):
+            st.write(f"**Full Title:** {data['title']}")
+            st.write(f"**Total Messages:** {len(data['messages'])}")
+            st.json(data["messages"])
+
+else:
+    current_chat = st.session_state.chats[st.session_state.current_chat_id]
+    messages = current_chat["messages"]
+
+    if len(messages) == 0:
+        st.markdown('<div class="bold-title">GYNAECOLOGY AND OBSTETRICS</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
+        st.markdown('<div class="source-credit">Source : DC Dutta</div>', unsafe_allow_html=True)
+
+    for msg in messages:
+        avatar = "🎓" if msg["role"] == "user" else "✨"
+        with st.chat_message(msg["role"], avatar=avatar):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
         if current_chat["title"] == "New Chat":
             current_chat["title"] = prompt[:25]
 
@@ -304,11 +332,12 @@ if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
                             meta.get("page") 
                             or meta.get("page_number") 
                             or meta.get("source_page") 
-                            or meta.get("loc.pageNumber")
+                            or meta.get("loc.pageNumber") 
+                            or (meta.get("loc", {}).get("pageNumber") if isinstance(meta.get("loc"), dict) else None)
                         )
                         
                         if page_val is None:
-                            match = re.search(r'(?:Page|pg\.?|p\.)\s*(\d+)', doc.page_content[:150], re.IGNORECASE)
+                            match = re.search(r'(?:Page|pg\.?|p\.)\s*(\d+)', doc.page_content[:100], re.IGNORECASE)
                             if match:
                                 page_val = match.group(1)
 
@@ -321,19 +350,19 @@ if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
                                 page_numbers.add(str(page_val))
                                 p_str = str(page_val)
                         else:
-                            p_str = "N/A"
+                            p_str = "Ref"
 
-                        context_blocks.append(f"[DC Dutta Reference Text]\n{doc.page_content[:800]}")
+                        context_blocks.append(f"[DC Dutta Reference Page {p_str}]\n{doc.page_content[:800]}")
 
                     context_text = "\n\n".join(context_blocks)
                     
-                    if page_numbers and "N/A" not in page_numbers:
-                        pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
-                        citation_line = f"📌 **Source Citation**: DC Dutta Textbook of Obstetrics & Gynecology (Page(s): {pages_ref})"
+                    if page_numbers:
+                        pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if str(x).isdigit() else 0))
+                        citation_line = f"📌 **Source Citation**: DC Dutta Obstetrics & Gynecology (Page(s): {pages_ref})"
                     else:
-                        citation_line = f"📌 **Source Citation**: DC Dutta Textbook of Obstetrics & Gynecology (Topic: {prompt.title()})"
+                        citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
 
-                    full_prompt = f"""You are a senior clinical professor explaining concepts derived from DC Dutta's Textbook of Obstetrics & Gynecology.
+                    full_prompt = f"""You are a senior clinical professor and medical expert explaining concepts derived from DC Dutta's Textbook of Obstetrics & Gynecology.
 
 CONVERSATION HISTORY:
 {history_context}
@@ -345,17 +374,17 @@ USER QUESTION:
 {prompt}
 
 INSTRUCTIONS:
-1. DUAL LANGUAGE ADAPTABILITY:
-   - Detect language of USER QUESTION.
-   - If asked in Hinglish (Roman Hindi), respond in easy, practical Hinglish suitable for ASHA workers.
-   - If asked in English, respond in clinical English.
+1. DUAL LANGUAGE ADAPTABILITY (CRITICAL):
+   - Detect the language of the USER QUESTION.
+   - If the user asks in Hinglish (e.g., "warning signs kya hai", "treatment batao", "kaise pehchane", "hinglish me batao"), YOU MUST RESPOND ENTIRELY IN EASY, PRACTICAL HINGLISH (Roman Hindi). Use simple terms suitable for ASHA workers and grassroots healthcare providers.
+   - If the user asks in standard English, respond in clear clinical English.
 
 2. CONTENT STRUCTURE:
-   - Use clear bullet points and bold headers.
+   - Provide clear, structured sections (Etiology, Clinical Features/Warning Signs, Investigations, Management) as appropriate.
+   - Use bullet points for readability on mobile screens.
 
-3. MANDATORY CITATION:
-   - YOU MUST END YOUR RESPONSE WITH THIS EXACT CITATION LINE AS THE VERY LAST SENTENCE:
-   {citation_line}
+3. CITATION:
+   - Strictly append `{citation_line}` at the very end of your response.
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
