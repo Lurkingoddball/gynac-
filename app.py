@@ -333,10 +333,25 @@ else:
                     context_blocks = []
                     page_numbers = set()
                     
+                    # NEW UPDATED CODE
                     for doc in docs:
                         meta = doc.metadata or {}
-                        page_val = meta.get("page") or meta.get("page_number") or meta.get("source_page")
                         
+                        # Inspect all potential metadata key variations PyPDF / LangChain create
+                        page_val = (
+                            meta.get("page") 
+                            or meta.get("page_number") 
+                            or meta.get("source_page") 
+                            or meta.get("loc.pageNumber") 
+                            or meta.get("loc", {}).get("pageNumber") if isinstance(meta.get("loc"), dict) else None
+                        )
+                        
+                        # Fallback: Extract page number if embedded directly inside doc content text
+                        if page_val is None:
+                            match = re.search(r'(?:Page|pg\.?|p\.)\s*(\d+)', doc.page_content[:100], re.IGNORECASE)
+                            if match:
+                                page_val = match.group(1)
+
                         if page_val is not None and str(page_val).strip() != "":
                             try:
                                 p_int = int(page_val) + 1
@@ -346,9 +361,9 @@ else:
                                 page_numbers.add(str(page_val))
                                 p_str = str(page_val)
                         else:
-                            p_str = "N/A"
-                        
-                        context_blocks.append(f"[DC Dutta Page {p_str}]\n{doc.page_content[:800]}")
+                            p_str = "Ref"
+
+                        context_blocks.append(f"[DC Dutta Reference Page {p_str}]\n{doc.page_content[:800]}"))
 
                     context_text = "\n\n".join(context_blocks)
                     
