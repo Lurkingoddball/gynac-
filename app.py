@@ -43,19 +43,21 @@ def init_rag():
 
 vector_db, llm = init_rag()
 
-# --- 5. CUSTOM CSS ---
+# --- 5. CUSTOM CSS (MATCHING EXPLICIT DESIGN THEME) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Rubik+Glitch&family=Rubik+Wet+Paint&family=Montserrat:wght@400;500;700&display=swap');
 
+    /* Global Background & Typography */
     html, body, .stApp {
         overscroll-behavior-y: none !important;
         touch-action: pan-x pan-y !important;
-        background-color: #f4f1ea !important;
+        background-color: #f4f1ea !important; /* Soft warm cream background */
         color: #111111 !important;
         font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
 
+    /* Hide Streamlit Default UI Elements */
     header[data-testid="stHeader"] {
         background: transparent !important;
         z-index: 99 !important;
@@ -76,6 +78,7 @@ st.markdown("""
         opacity: 1 !important;
     }
 
+    /* Main Container Padding */
     .main .block-container, [data-testid="stMainBlockContainer"] {
         max-width: 820px !important;
         width: 100% !important;
@@ -86,6 +89,7 @@ st.markdown("""
         padding-right: 1.2rem !important;
     }
 
+    /* Bold Display Header Typography */
     .bold-title {
         text-align: center;
         font-size: clamp(2rem, 6vw, 3.2rem);
@@ -114,6 +118,7 @@ st.markdown("""
         margin-bottom: 2.5rem;
     }
 
+    /* Styled Chat Bubble Cards */
     div[data-testid="stChatMessage"] {
         background-color: #ffffff !important;
         border: 2px solid #000000 !important;
@@ -123,6 +128,7 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
     }
 
+    /* Custom Input Bar Styling */
     .stChatInputContainer {
         border-radius: 35px !important;
         border: 2px solid #000000 !important;
@@ -143,6 +149,7 @@ st.markdown("""
         color: #111111 !important;
     }
 
+    /* Mobile Table Layout Fixes */
     div[data-testid="stChatMessage"] table {
         display: block !important;
         overflow-x: auto !important;
@@ -170,6 +177,7 @@ st.markdown("""
         vertical-align: top !important;
     }
 
+    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #eae6dd !important;
         border-right: 2px solid #000000 !important;
@@ -325,17 +333,20 @@ else:
                     context_blocks = []
                     page_numbers = set()
                     
+                    # NEW UPDATED CODE
                     for doc in docs:
                         meta = doc.metadata or {}
                         
+                        # Inspect all potential metadata key variations PyPDF / LangChain create
                         page_val = (
                             meta.get("page") 
                             or meta.get("page_number") 
                             or meta.get("source_page") 
                             or meta.get("loc.pageNumber") 
-                            or (meta.get("loc", {}).get("pageNumber") if isinstance(meta.get("loc"), dict) else None)
+                            or meta.get("loc", {}).get("pageNumber") if isinstance(meta.get("loc"), dict) else None
                         )
                         
+                        # Fallback: Extract page number if embedded directly inside doc content text
                         if page_val is None:
                             match = re.search(r'(?:Page|pg\.?|p\.)\s*(\d+)', doc.page_content[:100], re.IGNORECASE)
                             if match:
@@ -357,7 +368,7 @@ else:
                     context_text = "\n\n".join(context_blocks)
                     
                     if page_numbers:
-                        pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if str(x).isdigit() else 0))
+                        pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
                         citation_line = f"📌 **Source Citation**: DC Dutta Obstetrics & Gynecology (Page(s): {pages_ref})"
                     else:
                         citation_line = "📌 **Source Citation**: DC Dutta Obstetrics & Gynecology Textbook"
