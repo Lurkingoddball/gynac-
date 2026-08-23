@@ -363,7 +363,7 @@ else:
                         else:
                             p_str = "Ref"
 
-                        context_blocks.append(f"[DC Dutta Reference Page {p_str}]\n{doc.page_content[:800]}"))
+                        context_blocks.append(f"[DC Dutta Reference Page {p_str}]\n{doc.page_content[:800]}")
 
                     context_text = "\n\n".join(context_blocks)
                     
