@@ -267,43 +267,7 @@ with st.sidebar:
                 st.session_state.view_mode = "chat"
                 st.rerun()
 
-# --- 8. MAIN VIEW ROUTING ---
-if st.session_state.admin_logged_in and st.session_state.view_mode == "analytics":
-    st.title("⚙️ Backend Admin Analytics")
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Active Sessions", len(st.session_state.chats))
-    
-    total_q = sum(len([m for m in c["messages"] if m["role"] == "user"]) for c in st.session_state.chats.values())
-    col2.metric("Total User Queries", total_q)
-    
-    total_messages = sum(len(c["messages"]) for c in st.session_state.chats.values())
-    col3.metric("Total Messages Exchanged", total_messages)
-    
-    st.divider()
-    st.subheader("Session Log Transcripts")
-    
-    for cid, data in st.session_state.chats.items():
-        with st.expander(f"Session: {data['title']} (ID: {cid[:8]}...)"):
-            st.write(f"**Full Title:** {data['title']}")
-            st.write(f"**Total Messages:** {len(data['messages'])}")
-            st.json(data["messages"])
-
-else:
-    current_chat = st.session_state.chats[st.session_state.current_chat_id]
-    messages = current_chat["messages"]
-
-    if len(messages) == 0:
-        st.markdown('<div class="bold-title">GYNAECOLOGY AND OBSTETRICS</div>', unsafe_allow_html=True)
-        st.markdown('<div class="sub-credit">Made by Aryan Jadhav</div>', unsafe_allow_html=True)
-        st.markdown('<div class="source-credit">Source : DC Dutta</div>', unsafe_allow_html=True)
-
-    for msg in messages:
-        avatar = "🎓" if msg["role"] == "user" else "✨"
-        with st.chat_message(msg["role"], avatar=avatar):
-            st.markdown(msg["content"])
-
-    if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
+if prompt := st.chat_input("Ask anything from Gynaec-Obs..."):
         if current_chat["title"] == "New Chat":
             current_chat["title"] = prompt[:25]
 
@@ -333,43 +297,9 @@ else:
                     context_blocks = []
                     page_numbers = set()
                     
-                    # NEW UPDATED CODE
                     for doc in docs:
                         meta = doc.metadata or {}
                         
-                        # Inspect all potential metadata key variations PyPDF / LangChain create
-                        page_val = (
-                            meta.get("page") 
-                            or meta.get("page_number") 
-                            or meta.get("source_page") 
-                            or meta.get("loc.pageNumber") 
-                            or meta.get("loc", {}).get("pageNumber") if isinstance(meta.get("loc"), dict) else None
-                        )
-                        
-                        # Fallback: Extract page number if embedded directly inside doc content text
-                        if page_val is None:
-                            match = re.search(r'(?:Page|pg\.?|p\.)\s*(\d+)', doc.page_content[:100], re.IGNORECASE)
-                            if match:
-                                page_val = match.group(1)
-
-                        if page_val is not None and str(page_val).strip() != "":
-                            try:
-                                p_int = int(page_val) + 1
-                                page_numbers.add(str(p_int))
-                                p_str = str(p_int)
-                            except ValueError:
-                                page_numbers.add(str(page_val))
-                                p_str = str(page_val)
-                        else:
-                            p_str = "Ref"
-
-context_blocks = []
-                    page_numbers = set()
-                    
-                    for doc in docs:
-                        meta = doc.metadata or {}
-                        
-                        # Check metadata keys first
                         page_val = (
                             meta.get("page") 
                             or meta.get("page_number") 
@@ -377,7 +307,6 @@ context_blocks = []
                             or meta.get("loc.pageNumber")
                         )
                         
-                        # Fallback regex search on document content text
                         if page_val is None:
                             match = re.search(r'(?:Page|pg\.?|p\.)\s*(\d+)', doc.page_content[:150], re.IGNORECASE)
                             if match:
@@ -398,12 +327,10 @@ context_blocks = []
 
                     context_text = "\n\n".join(context_blocks)
                     
-                    # Force citation generation
                     if page_numbers and "N/A" not in page_numbers:
                         pages_ref = ", ".join(sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 0))
                         citation_line = f"📌 **Source Citation**: DC Dutta Textbook of Obstetrics & Gynecology (Page(s): {pages_ref})"
                     else:
-                        # Dynamic citation fallback for presentation safety
                         citation_line = f"📌 **Source Citation**: DC Dutta Textbook of Obstetrics & Gynecology (Topic: {prompt.title()})"
 
                     full_prompt = f"""You are a senior clinical professor explaining concepts derived from DC Dutta's Textbook of Obstetrics & Gynecology.
@@ -429,31 +356,6 @@ INSTRUCTIONS:
 3. MANDATORY CITATION:
    - YOU MUST END YOUR RESPONSE WITH THIS EXACT CITATION LINE AS THE VERY LAST SENTENCE:
    {citation_line}
-"""
-
-                    full_prompt = f"""You are a senior clinical professor and medical expert explaining concepts derived from DC Dutta's Textbook of Obstetrics & Gynecology.
-
-CONVERSATION HISTORY:
-{history_context}
-
-TEXTBOOK CONTEXT:
-{context_text}
-
-USER QUESTION:
-{prompt}
-
-INSTRUCTIONS:
-1. DUAL LANGUAGE ADAPTABILITY (CRITICAL):
-   - Detect the language of the USER QUESTION.
-   - If the user asks in Hinglish (e.g., "warning signs kya hai", "treatment batao", "kaise pehchane", "hinglish me batao"), YOU MUST RESPOND ENTIRELY IN EASY, PRACTICAL HINGLISH (Roman Hindi). Use simple terms suitable for ASHA workers and grassroots healthcare providers.
-   - If the user asks in standard English, respond in clear clinical English.
-
-2. CONTENT STRUCTURE:
-   - Provide clear, structured sections (Etiology, Clinical Features/Warning Signs, Investigations, Management) as appropriate.
-   - Use bullet points for readability on mobile screens.
-
-3. CITATION:
-   - Strictly append `{citation_line}` at the very end of your response.
 """
                     response = llm.invoke(full_prompt)
                     response_text = response.content
