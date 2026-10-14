@@ -1,0 +1,6 @@
+books/
+chroma_db/
+dutta_vector_db/
+__pycache__/
+*.pyc
+.env

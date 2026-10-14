@@ -1,10 +1,9 @@
 streamlit
-langchain-chroma
-langchain-community
-langchain-groq
-sentence-transformers
 chromadb
+sentence-transformers
 torch
-torchvision
-pdf2image
+langchain-groq
+pymupdf
+huggingface_hub
 pillow
+
