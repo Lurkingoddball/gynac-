@@ -25,7 +25,13 @@ if not groq_api_key:
     st.error("Groq API Key is missing. Please set GROQ_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# --- 4. INITIALIZE VECTOR DB & LLM ---
+# --- 4. INITIALIZE VECTOR DB & RESILIENT LLM PIPELINE ---
+CANDIDATE_MODELS = [
+    "llama-3.3-70b-versatile",
+    "qwen/qwen3.8-27b",
+    "llama-3.1-8b-instant"
+]
+
 @st.cache_resource
 def init_rag():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -35,13 +41,41 @@ def init_rag():
     )
     llm = ChatGroq(
         groq_api_key=groq_api_key,
-        model_name="qwen/qwen3.6-27b",
+        model_name=CANDIDATE_MODELS[0],
         temperature=0.1,
         max_tokens=3000
     )
     return vector_db, llm
 
 vector_db, llm = init_rag()
+
+def invoke_llm_with_fallback(prompt_text):
+    """Invokes primary model and automatically falls back if model is deprecated or unavailable."""
+    try:
+        resp = llm.invoke(prompt_text)
+        text = resp.content
+        if "<think>" in text:
+            text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+        return text
+    except Exception as primary_err:
+        last_err = primary_err
+        for model_name in CANDIDATE_MODELS[1:]:
+            try:
+                curr_llm = ChatGroq(
+                    groq_api_key=groq_api_key,
+                    model_name=model_name,
+                    temperature=0.1,
+                    max_tokens=3000
+                )
+                resp = curr_llm.invoke(prompt_text)
+                text = resp.content
+                if "<think>" in text:
+                    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+                return text
+            except Exception as e:
+                last_err = e
+                continue
+        raise last_err
 
 # --- 5. CUSTOM CSS (MATCHING EXPLICIT DESIGN THEME) ---
 st.markdown("""
@@ -397,13 +431,7 @@ INSTRUCTIONS:
 3. CITATION:
    - Strictly append `{citation_line}` at the very end of your response.
 """
-                    response = llm.invoke(full_prompt)
-                    response_text = response.content
-
-                    if "<think>" in response_text:
-                        response_text = re.sub(
-                            r"<think>.*?</think>", "", response_text, flags=re.DOTALL
-                        ).strip()
+                    response_text = invoke_llm_with_fallback(full_prompt)
 
                 except Exception as e:
                     response_text = f"⚠️ Error generating response: {str(e)}"
